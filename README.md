@@ -119,6 +119,8 @@ python scripts/render_project.py --config projects/example_self_generated_walkth
 
 如果本地不能直接调用 gpt-image-2，脚本只会写出 `prompt_pack.md` 和 `STATIC_IMAGE_GENERATION_PENDING`，不会伪造图片或假装已经生成成片。
 
+L1 静态图伪漫游 renderer 支持 `subtitle_mode=minimal` 和 `captions`。文案应该按镜头设计，少字、低压迫感、突出空间价值；脚本会生成 `.ass` 字幕文件并烧录到最终 MP4。
+
 v1.1 L1 自动图片成片入口：
 
 ```bash

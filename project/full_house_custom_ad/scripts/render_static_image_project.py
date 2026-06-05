@@ -395,6 +395,132 @@ def mux_music(video_only: Path, music: Path | None, final: Path, duration: float
     return "无音乐版；未下载或抓取任何外部音乐。"
 
 
+def ass_time(seconds: float) -> str:
+    seconds = max(0.0, seconds)
+    h = int(seconds // 3600)
+    m = int((seconds % 3600) // 60)
+    s = seconds - h * 3600 - m * 60
+    return f"{h:d}:{m:02d}:{s:05.2f}"
+
+
+def escape_ass_text(text: str) -> str:
+    return (
+        text.replace("\\", "\\\\")
+        .replace("{", "\\{")
+        .replace("}", "\\}")
+        .replace("\n", "\\N")
+    )
+
+
+def subtitles_enabled(config: dict[str, Any]) -> bool:
+    mode = str(config.get("subtitle_mode", "none")).strip().lower()
+    return mode not in {"", "none", "off", "false", "0"}
+
+
+def caption_entries_from_config(
+    config: dict[str, Any],
+    items: list[dict[str, Any]],
+    transition_duration: float,
+    final_duration: float,
+) -> list[dict[str, Any]]:
+    raw = config.get("captions")
+    if not isinstance(raw, list):
+        return []
+    entries: list[dict[str, Any]] = []
+    timeline_start = 0.0
+    shot_starts: list[float] = []
+    for index, item in enumerate(items):
+        shot_starts.append(timeline_start)
+        timeline_start += float(item["computed_duration"])
+        if index < len(items) - 1:
+            timeline_start -= transition_duration
+
+    for index, item in enumerate(raw):
+        if not isinstance(item, dict):
+            continue
+        text = str(item.get("text", "")).strip()
+        if not text:
+            continue
+        shot_index = int(item.get("shot_index", index) or 0)
+        shot_index = min(max(shot_index, 0), max(0, len(items) - 1))
+        default_start = shot_starts[shot_index] + 0.45
+        default_end = min(default_start + 2.65, final_duration - 0.25)
+        start = float(item.get("start", default_start) or default_start)
+        end = float(item.get("end", default_end) or default_end)
+        if end <= start:
+            end = min(start + 2.4, final_duration)
+        entries.append({"start": start, "end": min(end, final_duration), "text": text})
+    return entries
+
+
+def write_ass_subtitles(
+    ass_path: Path,
+    captions: list[dict[str, Any]],
+    *,
+    width: int,
+    height: int,
+    config: dict[str, Any],
+) -> None:
+    font_size = int(config.get("subtitle_font_size", 54) or 54)
+    margin_v = int(config.get("subtitle_margin_v", 220) or 220)
+    font_name = str(config.get("subtitle_font", "PingFang SC"))
+    lines = [
+        "[Script Info]",
+        "ScriptType: v4.00+",
+        f"PlayResX: {width}",
+        f"PlayResY: {height}",
+        "ScaledBorderAndShadow: yes",
+        "",
+        "[V4+ Styles]",
+        "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, "
+        "Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, "
+        "Alignment, MarginL, MarginR, MarginV, Encoding",
+        f"Style: Main,{font_name},{font_size},&H00F4F1EA,&H00FFFFFF,&H9A181818,&H5A000000,"
+        f"1,0,0,0,100,100,0,0,1,1.35,0.45,2,90,90,{margin_v},1",
+        "",
+        "[Events]",
+        "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
+    ]
+    for caption in captions:
+        lines.append(
+            "Dialogue: 0,"
+            f"{ass_time(float(caption['start']))},"
+            f"{ass_time(float(caption['end']))},"
+            f"Main,,0,0,0,,{escape_ass_text(str(caption['text']))}"
+        )
+    ass_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def burn_subtitles(source: Path, final: Path, ass_path: Path) -> None:
+    run(
+        [
+            ffmpeg_exe(),
+            "-y",
+            "-i",
+            str(source),
+            "-vf",
+            f"ass={ass_path.as_posix()}",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-profile:v",
+            "high",
+            "-level",
+            "4.2",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "18",
+            "-c:a",
+            "copy",
+            "-movflags",
+            "+faststart",
+            str(final),
+        ]
+    )
+
+
 def make_preview(final: Path, preview: Path, duration: float, output_name: str) -> None:
     try:
         from PIL import Image
@@ -503,6 +629,8 @@ def write_plan(
     config: dict[str, Any],
     transition_duration: float,
     transition_type: str,
+    caption_count: int,
+    subtitle_file: Path | None,
 ) -> None:
     rows = "\n".join(
         (
@@ -544,7 +672,8 @@ def write_plan(
 - 运镜：慢推、轻微横移、中心构图收束，模拟看房氛围但不冒充真实 walkthrough。
 - 转场：{transition_type} 柔和叠化，单次约 {transition_duration:.2f} 秒；避免图片之间生硬硬切。
 - 调色：克制通透的高级样板间调色，低饱和暖灰，保留深色柜体重量感和暗部层次。
-- 字幕：少字或无字，避免遮挡空间价值。
+- 字幕：{'启用' if caption_count else '未启用'}；少字高级文案，避免遮挡空间价值。
+- 字幕文件：`{rel(subtitle_file) if subtitle_file else '未生成'}`
 
 ## 图片顺序
 
@@ -619,8 +748,10 @@ def main() -> int:
 
     video_only = OUT_DIR / f"{output_name}_video_only.mp4"
     final = OUT_DIR / f"{output_name}.mp4"
+    muxed = OUT_DIR / f"{output_name}_muxed.mp4"
     preview = OUT_DIR / f"{output_name}_preview.jpg"
     plan = OUT_DIR / f"{output_name}_plan.md"
+    subtitle_file = OUT_DIR / f"{output_name}.ass"
     concat_clips(
         tmp_clips,
         output_name,
@@ -629,7 +760,14 @@ def main() -> int:
         transition_duration=transition_duration,
         transition_type=transition_type,
     )
-    audio_note = mux_music(video_only, music, final, duration)
+    captions = caption_entries_from_config(config, items, transition_duration, duration) if subtitles_enabled(config) else []
+    if captions:
+        audio_note = mux_music(video_only, music, muxed, duration)
+        write_ass_subtitles(subtitle_file, captions, width=width, height=height, config=config)
+        burn_subtitles(muxed, final, subtitle_file)
+    else:
+        audio_note = mux_music(video_only, music, final, duration)
+        subtitle_file = None
     make_preview(final, preview, duration, output_name)
     update_manifest(project_id, items, music)
     write_plan(
@@ -646,6 +784,8 @@ def main() -> int:
         config=config,
         transition_duration=transition_duration,
         transition_type=transition_type,
+        caption_count=len(captions),
+        subtitle_file=subtitle_file,
     )
     print(final)
     print(preview)

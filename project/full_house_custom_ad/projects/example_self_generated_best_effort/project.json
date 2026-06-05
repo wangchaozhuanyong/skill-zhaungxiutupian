@@ -15,9 +15,37 @@
   "music": "",
   "use_source_audio": false,
   "subtitle_mode": "minimal",
+  "subtitle_font_size": 54,
+  "subtitle_margin_v": 220,
   "color_grade": "low_saturation_warm_grey_preserve_dark_cabinet_weight",
   "style": "意式轻奢",
   "output_name": "self_generated_best_effort_italian_light_luxury",
+  "captions": [
+    {
+      "shot_index": 0,
+      "text": "统一色系，才是真的高级"
+    },
+    {
+      "shot_index": 1,
+      "text": "入户开始，收纳就有秩序"
+    },
+    {
+      "shot_index": 2,
+      "text": "客餐厅一体，空间更显大"
+    },
+    {
+      "shot_index": 3,
+      "text": "餐边柜做好，生活少一半凌乱"
+    },
+    {
+      "shot_index": 4,
+      "text": "柜体统一，家才干净耐看"
+    },
+    {
+      "shot_index": 5,
+      "text": "全屋定制，贵在统一和细节"
+    }
+  ],
   "auto_generation_order": [
     "continuous_ai_video",
     "segmented_ai_clips",
