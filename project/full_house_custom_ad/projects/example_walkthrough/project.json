@@ -1,0 +1,43 @@
+{
+  "project_id": "italian_light_luxury_145sqm",
+  "target_video_type": "sample_level_walkthrough",
+  "capability_level": "L4",
+  "platform": "douyin",
+  "resolution": "1080x1920",
+  "fps": 60,
+  "source_video": "",
+  "source_images_dir": "",
+  "music": "",
+  "duration": 13,
+  "style": "意式轻奢",
+  "allow_downgrade": false,
+  "output_name": "italian_light_luxury_145sqm_walkthrough",
+  "continuity_checks": {
+    "same_space_path": false,
+    "minimal_hard_cuts": false,
+    "continuous_parallax": false,
+    "material_light_consistency": false,
+    "publish_ready_realism": false
+  },
+  "style_bible": {
+    "project_theme": "145㎡意式轻奢大横厅",
+    "floor_plan_assumption": "玄关进入客餐厅一体大横厅，电视墙、沙发、餐桌、餐边柜和落地窗在同一空间内连续成立。",
+    "fixed_furniture_layout": "电视墙在长边，沙发正对电视墙，餐桌位于沙发后方，餐边柜靠近餐区，落地窗位于客厅侧。",
+    "fixed_tv_wall": "暖灰岩板电视墙，深灰门墙柜一体柜体，隐藏灯带。",
+    "fixed_sofa": "低矮暖灰色直排沙发，与电视墙平行。",
+    "fixed_dining_table": "深色长方形餐桌，位于客餐厅中轴后段。",
+    "fixed_floor_material": "暖灰高反光大板砖，反光干净但不过亮。",
+    "fixed_cabinet_material": "深灰哑光柜门、暖木饰面、香槟金属细节。",
+    "fixed_light_temperature": "3000K 暖色隐藏灯带，柔和窗光，低饱和高级调色。",
+    "fixed_camera_path": "中低机位从玄关柜体边缘进入，慢横移打开客餐厅，经过餐桌和餐边柜，停在电视墙与落地窗同时成立的大景。",
+    "locked_visual_elements": [
+      "同一电视墙",
+      "同一沙发",
+      "同一餐桌",
+      "同一地面反光",
+      "同一柜体颜色",
+      "同一灯带色温"
+    ],
+    "negative_prompt": "different room, different house, inconsistent TV wall, inconsistent sofa, inconsistent dining table, changing floor material, changing cabinet color, harsh light, over saturated, cartoon, text, watermark"
+  }
+}

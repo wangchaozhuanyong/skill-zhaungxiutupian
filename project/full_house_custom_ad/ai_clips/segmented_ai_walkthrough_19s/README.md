@@ -1,12 +1,4 @@
-# Deprecated: true_walkthrough_19s AI 连续镜头目录
-
-这个目录名是历史遗留。这里放的是多个独立 AI video clip，默认能力等级是 L2：AI 分段空间漫游，不是真正 walkthrough，也不是样片级连续空间漫游。
-
-新项目请使用：
-
-```text
-full_house_custom_ad/ai_clips/segmented_ai_walkthrough_19s/
-```
+# segmented_ai_walkthrough_19s AI 分段镜头目录
 
 把 AI 视频平台生成的 5 段竖屏 mp4 放到这个目录，文件名必须如下：
 
@@ -19,7 +11,7 @@ full_house_custom_ad/ai_clips/segmented_ai_walkthrough_19s/
 然后运行：
 
 ```bash
-/Users/wangchao/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 full_house_custom_ad/scripts/assemble_true_walkthrough_ai_clips.py
+/Users/wangchao/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3 full_house_custom_ad/scripts/render_project.py --config full_house_custom_ad/projects/segmented_ai_walkthrough_19s/project.json
 ```
 
 输出会生成到：
@@ -28,3 +20,5 @@ full_house_custom_ad/ai_clips/segmented_ai_walkthrough_19s/
 - `full_house_custom_ad/output/segmented_ai_walkthrough_19s_preview.jpg`
 - `full_house_custom_ad/output/segmented_ai_walkthrough_19s_plan.md`
 - `full_house_custom_ad/output/segmented_ai_walkthrough_19s_continuity_report.md`
+
+注意：多个独立 AI clip 拼接默认是 L2：AI 分段空间漫游，不是真正 walkthrough，也不是样片级连续空间漫游。
