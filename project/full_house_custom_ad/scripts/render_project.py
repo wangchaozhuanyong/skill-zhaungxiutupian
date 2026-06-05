@@ -98,7 +98,7 @@ def main() -> int:
         next_config_path = generated_config_path(config, config_path)
         if proc.returncode != 0 or not next_config_path.exists():
             print("GENERATOR_NOT_READY")
-            print("所有自动生成后端均未产出可渲染素材。不会要求用户上传 source_video。")
+            print("所有 API 无人值守生成后端均未产出可渲染素材。不会要求用户上传 source_video。")
             return 10
         config_path = next_config_path.resolve()
         config = load_config(config_path)

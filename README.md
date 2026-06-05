@@ -22,6 +22,14 @@ rsync -a skills/full-house-custom-ad/ ~/.codex/skills/full-house-custom-ad/
 使用 $full-house-custom-ad，任务是：先选音乐，再用 gpt-image-2 生成新图片，最后本地制作成抖音竖屏高级装修视频。先给我方案，确认后再制作。
 ```
 
+日常在 Codex 里直接调用 skill 时，默认不需要你配置 `OPENAI_API_KEY`、`FAL_KEY` 或其他额外 API。Codex 会先用当前会话可用的生成能力设计/准备素材，再调用本地脚本渲染成片。API 后端只用于你明确要求“脚本无人值守自动跑”“批量生产”“我愿意配置 API key”的场景。
+
+如果你不想接 API，可以这样说：
+
+```text
+使用 $full-house-custom-ad，任务是：不接 API，直接由 Codex 生成素材并制作一条 L1 样片风格伪漫游装修短视频。先给我方案，确认后再制作。
+```
+
 ## 本地项目
 
 本地制作脚本在：
@@ -56,12 +64,21 @@ python scripts/render_project.py --config projects/example_self_generated_walkth
 
 这个入口用于 v1.0-final-auto-assets：当用户不提供素材、要求系统自己制作素材、自动生成素材、做测试片或从零做原创空间时，`render_project.py` 会先启用 `auto_generate_assets` 自动生成素材模式。
 
-自动生成素材模式的顺序是：
+这里的 `render_project.py` 是本地脚本无人值守入口，不能直接调用 Codex 聊天窗口里的会员能力。日常让 Codex 交互式制作时，不需要先跑这个 API 入口。
+
+Codex 交互式自动素材生成的默认顺序是：
+
+- 设计 Style Bible、空间路线和关键帧提示词。
+- 当前会话可生成图片时，生成或准备同一空间静态关键帧。
+- 调用本地 L1 renderer 输出样片风格伪漫游 MP4。
+- 不要求用户上传 `source_video`，也不要求配置额外 API。
+
+本地脚本无人值守模式的后端顺序是：
 
 - `continuous_ai_video` 可用：生成单条连续 AI video，进入 L3 candidate，再走真正空间漫游后期；不自动保证 L4。
 - `segmented_ai_clips` 可用：生成多个 AI video clip，进入 L2 AI 分段空间漫游；不得叫 L3/L4。
 - `static_keyframes` / `gpt-image-2` 可用：生成静态关键帧，进入 L1 样片风格伪漫游；不得叫 true walkthrough。
-- 所有生成后端不可用：输出 `GENERATOR_NOT_READY`，生成 auto assets report，不会第一轮要求用户上传 `source_video`。
+- 所有 API 后端不可用：输出 `GENERATOR_NOT_READY`，生成 auto assets report，不会第一轮要求用户上传 `source_video`。这个状态只代表脚本无人值守后端未就绪，不代表 Codex 交互模式不能做 L1。
 
 如果本地不能直接调用 gpt-image-2，脚本只会写出 `prompt_pack.md` 和 `STATIC_IMAGE_GENERATION_PENDING`，不会伪造图片或假装已经生成成片。
 
@@ -98,6 +115,8 @@ OPENAI_API_KEY=your_real_openai_api_key
 ```
 
 `generate_gpt_image_keyframes.py` 默认使用项目配置里的图片模型，例如 `gpt-image-1.5`。如果本机没有 `OPENAI_API_KEY`，它会输出 `GENERATOR_NOT_READY`，同时保留 `prompt_pack.md`，不会伪造图片。生成出的图片最高只进入 L1 样片风格伪漫游，不得称为真正 walkthrough 或 L4。
+
+这段只适用于本地脚本无人值守生成图片。你直接在 Codex 里让我做时，默认走 Codex 交互式生成，不要求配置这个 key。
 
 连续视频后期模板：
 
@@ -138,8 +157,9 @@ L4 最终通过不能只改 `project.json`。必须保留 `output/<project>_sema
 - 单条真实连续视频、专业 3D 漫游导出或单条 AI 连续视频：走 `render_continuous_video_project.py`
 - 多个独立 AI video clip：走 `assemble_segmented_ai_walkthrough_clips.py`
 - 静态图关键帧：走 `render_static_image_project.py`，只允许标注 L1 伪漫游/图片展示，不得冒充真正 walkthrough
-- 没有素材且 `auto_generate_assets=true` 或 `source_policy=auto_generate`：先走 `generate_auto_project_assets.py`，自动尝试 L3 -> L2 -> L1 最高可执行版本
-- 没有素材且所有生成后端不可用：输出 `GENERATOR_NOT_READY`
+- 没有素材且在 Codex 交互式调用：默认由 Codex 设计/准备素材，再走 L1 渲染
+- 没有素材且 `auto_generate_assets=true` 或 `source_policy=auto_generate`：本地脚本先走 `generate_auto_project_assets.py`，自动尝试 API L3 -> L2 -> L1 最高可执行版本
+- 没有素材且所有 API 生成后端不可用：输出 `GENERATOR_NOT_READY`，但不要求上传 `source_video`
 - 没有素材且没有开启自动生成：只输出报告并停止
 
 仓库不提交以下内容：
@@ -178,7 +198,7 @@ project/full_house_custom_ad/music_library/mp3/
 
 ## FAL AI video
 
-v1.1 已内置 `fal_video_provider.py`，不再需要自行添加 `plugins/video_gen/fal.py`。如果要使用 FAL 生成 L2 分段 AI clip 或 L3 单条连续 AI video，只需要配置密钥。密钥可放在以下任一文件：
+v1.1 已内置 `fal_video_provider.py`，不再需要自行添加 `plugins/video_gen/fal.py`。FAL 是可选的脚本无人值守视频生成后端，不是日常调用 skill 的必需条件。如果要使用 FAL 生成 L2 分段 AI clip 或 L3 单条连续 AI video，只需要配置密钥。密钥可放在以下任一文件：
 
 ```text
 project/full_house_custom_ad/.env
@@ -241,6 +261,19 @@ python scripts/check_v1_1_video_integrity.py
 V1.1 video backend integrity check passed.
 ```
 
+v1.1 Codex 交互式默认模式检查：
+
+```bash
+cd project/full_house_custom_ad
+python scripts/check_v1_1_codex_mode_integrity.py
+```
+
+通过时会输出：
+
+```text
+V1.1 Codex interactive mode integrity check passed.
+```
+
 ## 备注
 
-真正空间漫游需要真实连续视频、AI 连续视频或专业 3D 漫游素材。v1.0 可以在用户不提供素材时自动尝试生成 L3/L2/L1 中最高可执行版本，但不承诺从 0 稳定生成 L4。样片级连续空间漫游还必须通过连续性检查、样片级专项评分和人工空间语义复核文件校验。validator 的抽帧和帧差只提供基础视觉证据，不能自动证明电视墙、沙发、材质、灯光和空间比例语义一致。缺少连续素材时，skill 可以继续执行高质量降级方案，但必须清楚标注为图片展示、样片风格伪漫游或 AI 分段空间漫游，不能冒充同款样片级 walkthrough。
+真正空间漫游需要真实连续视频、AI 连续视频或专业 3D 漫游素材。日常 Codex 调用不需要额外 API，默认能稳定做的是 L1 样片风格伪漫游；如果当前会话具备视频生成能力或你选择可选 API 后端，才进一步尝试 L2/L3。v1.0/v1.1 不承诺从 0 稳定生成 L4。样片级连续空间漫游还必须通过连续性检查、样片级专项评分和人工空间语义复核文件校验。validator 的抽帧和帧差只提供基础视觉证据，不能自动证明电视墙、沙发、材质、灯光和空间比例语义一致。缺少连续素材时，skill 可以继续执行高质量降级方案，但必须清楚标注为图片展示、样片风格伪漫游或 AI 分段空间漫游，不能冒充同款样片级 walkthrough。

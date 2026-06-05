@@ -6,12 +6,24 @@
 
 当用户明确说“不提供素材”“你自己制作素材”“自动生成素材”“不要让我上传视频”“做一个测试片”“直接做一个原创空间”“从零做一个装修视频”“没有素材你自己生成”等表达时，必须启用自动原创素材生成模式。
 
-自动生成模式的决策顺序：
+先判断用户要哪一种生成模式：
+
+- Codex 交互式生成：默认。用户在 ChatGPT/Codex 里直接让我们做，不要求配置 API key。
+- API 无人值守生成：可选。只有用户明确要求本地脚本批量自动跑，或明确愿意配置 API key，才进入。
+
+Codex 交互式生成的默认决策：
+
+1. 用当前会话能力生成或准备静态关键帧；
+2. 生成 L1 project.json；
+3. 本地渲染 L1 样片风格伪漫游；
+4. 如果没有会话视频生成工具，不承诺 L2/L3，但也不要求用户上传 `source_video`。
+
+API 无人值守模式的决策顺序：
 
 1. 尝试 `continuous_ai_video`：成功后 `source_type=continuous_ai_video`，capability level 为 L3 candidate。
 2. 不可用则尝试 `segmented_ai_clips`：成功后 `source_type=segmented_ai_clips`，capability level 为 L2。
 3. 不可用则尝试 `static_keyframes` / `gpt-image-2`：成功后 `source_type=static_images`，capability level 为 L1。
-4. 全部不可用则输出 `GENERATOR_NOT_READY`，不得要求用户第一轮上传 `source_video`。
+4. 全部不可用则输出 `GENERATOR_NOT_READY`，但这只代表 API 无人值守后端未就绪；不得要求用户第一轮上传 `source_video`，应给 Codex 交互式 L1 方案。
 
 自动生成模式不会让 L1/L2 升级为 L3/L4。它只负责自动产出当前最高可执行素材，并按真实素材能力命名。
 
@@ -101,7 +113,7 @@ D 类型必须先判断能力和素材：
 如果用户坚持要真正连续感：
 
 - 如果用户愿意提供素材，可以说明真实连续视频、专业 3D 漫游导出或单条连续 AI video 是 L3/L4 的来源。
-- 如果用户明确不提供素材，必须进入自动原创素材生成模式，按 continuous_ai_video -> segmented_ai_clips -> static_keyframes 自动尝试；不得第一轮要求上传素材。
+- 如果用户明确不提供素材，必须进入自动原创素材生成模式；默认 Codex 交互式生成 L1，只有用户明确选择 API 无人值守模式时才按 continuous_ai_video -> segmented_ai_clips -> static_keyframes 自动尝试；不得第一轮要求上传素材或要求配置 API。
 - 可以同时给“自动生成后的最高可执行方案”和“若未来有 L3/L4 素材后的升级方案”。
 
 ## 禁止行为
@@ -113,6 +125,7 @@ D 类型必须先判断能力和素材：
 - 不得恢复低真实感本地程序化 3D 路线。
 - 不得因为缺视频后端而停止全部工作；可以给降级方案，但必须标注降级。
 - 自动生成模式下不得第一轮要求用户上传 source_video。
+- 用户拒绝接 API 时，不得继续要求 `OPENAI_API_KEY` / `FAL_KEY`；必须切回 Codex 交互式生成。
 - 不得伪造 gpt-image-2 或 AI video 已经生成成功；后端不可用时必须输出 GENERATOR_NOT_READY 或 STATIC_IMAGE_GENERATION_PENDING。
 
 ## 推荐表达

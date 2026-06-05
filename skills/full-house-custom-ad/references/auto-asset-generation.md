@@ -1,6 +1,8 @@
 # 自动原创素材生成规则
 
-当用户明确不提供素材，或要求系统自己制作素材时，必须进入自动原创素材生成模式。目标是自动生成 L1/L2/L3 中最高可执行版本，而不是第一轮要求用户上传 `source_video`。
+当用户明确不提供素材，或要求系统自己制作素材时，必须进入自动原创素材生成模式。默认使用 Codex 交互式生成；API 后端只用于用户明确要求无人值守、批量自动化或愿意配置 API key 的场景。
+
+不要把 `OPENAI_API_KEY` / `FAL_KEY` 当成日常默认要求。缺少 API key 只代表脚本无人值守后端未就绪，不代表 Codex 交互模式不能继续制作 L1。
 
 ## 触发表达
 
@@ -16,12 +18,26 @@
 - 没有素材，你自己生成
 - 我需要他自己制作素材
 
-## 生成优先级
+## 默认模式：Codex 交互式生成
+
+用户直接在 ChatGPT/Codex 里让我们做时，默认流程是：
+
+1. Codex 先设计 Style Bible、分镜和关键帧提示词；
+2. Codex 使用当前会话可用的图片生成能力生成或准备静态关键帧；
+3. 保存关键帧到项目素材目录；
+4. 调用本地 L1 renderer 输出样片风格伪漫游 MP4；
+5. 全程不要求用户配置额外 API。
+
+如果当前会话没有视频生成工具，默认最高稳定可执行等级是 L1。不得因为缺少 FAL API 就要求用户上传 `source_video`。
+
+## 可选模式：API 无人值守生成
+
+只有用户明确选择本地脚本无人值守、批量自动化或愿意配置 API key 时，才使用以下顺序：
 
 1. `continuous_ai_video` 可用：生成单条连续 AI video，`source_type=continuous_ai_video`，最高进入 L3 候选。
 2. `segmented_ai_clips` 可用：生成多个独立 AI video clip，`source_type=segmented_ai_clips`，只能标 L2。
 3. `static_keyframes` / OpenAI Image API 可用：调用 `generate_gpt_image_keyframes.py` 生成静态关键帧，`source_type=static_images`，只能标 L1。
-4. 所有生成后端不可用：输出 `GENERATOR_NOT_READY`。
+4. 所有 API 无人值守后端不可用：输出 `GENERATOR_NOT_READY`，但仅表示 API 无人值守模式不可用；Codex 交互模式仍可继续做 L1。
 
 ## 禁止行为
 
@@ -30,6 +46,7 @@
 - 禁止把 L2 多段 AI clip 拼接称为真正空间漫游或样片级一镜到底。
 - 禁止把 L3 自动称为 L4。
 - 禁止伪造 OpenAI Image API 已经生成图片；若本地不能直接生成图片，只能输出 prompt pack 和 `STATIC_IMAGE_GENERATION_PENDING` / `GENERATOR_NOT_READY`。
+- 禁止把缺少 API key 说成“无法制作视频”；应切回 Codex 交互式生成，先做 L1。
 
 ## v1.1 L1 自动出片
 
@@ -44,7 +61,7 @@ project.json
 -> 输出 L1 样片风格伪漫游 MP4
 ```
 
-如果没有 `OPENAI_API_KEY`，必须保留 prompt pack 并输出 `GENERATOR_NOT_READY`，不得假装已生成图片。图片生成成功后，成片仍然只能命名为 L1 样片风格伪漫游。
+如果用户选择 API 无人值守模式但没有 `OPENAI_API_KEY`，必须保留 prompt pack 并输出 `GENERATOR_NOT_READY`，不得假装已生成图片。若用户是在 Codex 里直接调用，则切回 Codex 交互模式，由 Codex 当前会话生成或准备关键帧。图片生成成功后，成片仍然只能命名为 L1 样片风格伪漫游。
 
 ## v1.1 L2/L3 FAL 后端
 
@@ -53,7 +70,7 @@ v1.1 已内置 FAL queue provider：
 - `generate_segmented_ai_walkthrough_clips_fal.py`：有 `FAL_KEY` 时可直接生成多个 AI video clip，成功后标 L2。
 - `generate_continuous_ai_walkthrough_fal.py`：有 `FAL_KEY` 时可直接生成单条连续 AI video，成功后标 L3 candidate。
 - 两者都不得自动标 L4。
-- 未配置 `FAL_KEY` 时输出 `GENERATOR_NOT_READY`，不要求用户上传素材。
+- 未配置 `FAL_KEY` 时输出 `GENERATOR_NOT_READY`，不要求用户上传素材，也不阻止 Codex 交互模式继续做 L1。
 
 ## 正确输出
 
@@ -61,6 +78,7 @@ v1.1 已内置 FAL queue provider：
 
 ```text
 自动素材生成模式：已启用
+生成模式：Codex 交互式生成 / API 无人值守模式
 用户是否提供素材：否
 素材来源：自动生成
 本次将自动生成的素材类型：
@@ -68,6 +86,7 @@ v1.1 已内置 FAL queue provider：
 最高可执行 capability level：
 是否发生自动降级：
 最终输出等级命名：
+是否需要额外 API：
 GENERATOR_NOT_READY 状态：
 如果不能生成，原因：
 ```

@@ -197,13 +197,33 @@ capability_level=L1
 
 - 必须启用自动原创素材生成模式。
 - 不得第一轮要求用户上传 `source_video`。
-- 必须按 continuous_ai_video -> segmented_ai_clips -> static_keyframes 尝试最高可执行版本。
+- 默认生成模式必须是 Codex 交互式生成。
+- 必须写明是否需要额外 API：否。
+- 当前会话可生成图片时，先生成/准备静态关键帧并走 L1 renderer。
+- 只有用户明确选择 API 无人值守模式，才按 continuous_ai_video -> segmented_ai_clips -> static_keyframes 尝试最高可执行版本。
 - continuous_ai_video 成功时只能进入 L3 candidate，不得自动标 L4。
 - segmented_ai_clips 成功时只能标 L2。
 - static_keyframes 成功时只能标 L1。
-- 所有后端不可用时输出 `GENERATOR_NOT_READY`。
+- API 后端不可用时，输出 `GENERATOR_NOT_READY` 仅表示脚本无人值守后端未就绪，仍应给 Codex 交互式 L1 方案。
 
-## 自动生成模式但所有后端不可用
+## 用户拒绝接 API，要求直接用 Codex
+
+用户：
+
+```text
+我不想接 OPENAI_API_KEY / FAL_KEY，我已经买了 ChatGPT 和 Codex，直接用你做。
+```
+
+期望行为：
+
+- 必须切换为 Codex 交互式生成模式。
+- 必须输出“是否需要额外 API：否”。
+- 不得继续要求用户配置 `OPENAI_API_KEY` 或 `FAL_KEY`。
+- 不得说“没有 API key 所以不能制作视频”。
+- 默认最高稳定可执行等级是 L1 样片风格伪漫游。
+- L2/L3 只能在当前会话具备视频生成工具、用户提供连续视频，或用户主动选择 API 无人值守模式时执行。
+
+## API 无人值守生成模式但 API 后端不可用
 
 项目配置：
 
@@ -223,6 +243,7 @@ generation_backends 配置但本机缺少 FAL_KEY / provider / gpt-image-2 可�
 - 生成 auto assets report。
 - 如本地无法直接调用 gpt-image-2，可以生成 prompt pack，但不得伪造图片。
 - 不得要求用户上传 `source_video`。
+- 必须说明这是 API 无人值守后端不可用，不代表 Codex 交互模式不能继续做 L1。
 
 ## 自动生成静态关键帧 prompt pack
 

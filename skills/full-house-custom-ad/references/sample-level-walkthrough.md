@@ -75,10 +75,12 @@
 如果用户明确不提供素材、要求系统自己生成或只是做测试片：
 
 - 启用自动原创素材生成模式。
-- 先尝试生成单条连续 AI video，成功后只能进入 L3 candidate；L4 仍需报告、视觉证据、专项评分和人工复核。
-- 连续 AI video 不可用时尝试多个 AI video clip，成功后只能标 L2。
-- AI video 不可用时尝试 gpt-image-2 静态关键帧，成功后只能标 L1。
-- 全部不可用时输出 `GENERATOR_NOT_READY`，不得第一轮要求用户上传 `source_video`。
+- 默认进入 Codex 交互式生成路径，不要求 `OPENAI_API_KEY` / `FAL_KEY`。
+- 当前会话可生成图片时，先设计 Style Bible 和同一空间静态关键帧，再本地渲染 L1 样片风格伪漫游。
+- 只有用户明确选择 API 无人值守模式，或当前会话具备视频生成工具时，才尝试单条连续 AI video；成功后只能进入 L3 candidate，L4 仍需报告、视觉证据、专项评分和人工复核。
+- 多个独立 AI video clip 成功后只能标 L2。
+- gpt-image-2 / 静态关键帧成功后只能标 L1。
+- API 无人值守后端全部不可用时输出 `GENERATOR_NOT_READY`，但这只表示脚本后端未就绪；不得第一轮要求用户上传 `source_video`，也不得阻止 Codex 交互式 L1 方案。
 
 ## 必须先输出的诊断
 
