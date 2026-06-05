@@ -176,9 +176,9 @@ project/full_house_custom_ad/music_library/mp3/
 
 缺少连续素材时，可以用 gpt-image-2 做高质量关键帧和 L1 伪漫游，但不能把它叫真正 walkthrough。多个独立 AI clip 至少需要 2 个 clip 才能进入 L2；没有连续性报告、关键帧视觉证据、有效人工空间语义复核文件和 >=85 的样片级专项评分，不得叫 L4 样片级连续空间漫游。
 
-## FAL 分段 AI video
+## FAL AI video
 
-如果要使用 FAL 生成分段 AI clip，需要自行准备可用的 provider 和密钥。密钥可放在以下任一文件：
+v1.1 已内置 `fal_video_provider.py`，不再需要自行添加 `plugins/video_gen/fal.py`。如果要使用 FAL 生成 L2 分段 AI clip 或 L3 单条连续 AI video，只需要配置密钥。密钥可放在以下任一文件：
 
 ```text
 project/full_house_custom_ad/.env
@@ -192,10 +192,12 @@ project/.env
 FAL_KEY=your_real_fal_key
 ```
 
-本仓库的分段 AI clip 只标注为 L2：AI 分段空间漫游。它可以有动态镜头，但不能默认说成样片级连续 walkthrough。FAL provider 需要自行添加到：
+本仓库的分段 AI clip 只标注为 L2：AI 分段空间漫游。它可以有动态镜头，但不能默认说成样片级连续 walkthrough。单条连续 AI video 只进入 L3 candidate，不自动保证 L4。
+
+内置 provider 使用 FAL queue HTTP API：
 
 ```text
-project/full_house_custom_ad/plugins/video_gen/fal.py
+project/full_house_custom_ad/scripts/fal_video_provider.py
 ```
 
 ## v1.0 完整性检查
@@ -224,6 +226,19 @@ python scripts/check_v1_1_l1_integrity.py
 
 ```text
 V1.1 L1 integrity check passed.
+```
+
+v1.1 L2/L3 视频后端检查：
+
+```bash
+cd project/full_house_custom_ad
+python scripts/check_v1_1_video_integrity.py
+```
+
+通过时会输出：
+
+```text
+V1.1 video backend integrity check passed.
 ```
 
 ## 备注

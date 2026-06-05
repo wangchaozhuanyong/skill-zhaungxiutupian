@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -20,27 +19,15 @@ sys.path.insert(0, str(REPO))
 import requests
 
 
-PROVIDER_PATH = ROOT / "plugins" / "video_gen" / "fal.py"
+from scripts.fal_video_provider import FALQueueVideoProvider, FALVideoGenerationError, load_default_env
+
+
 NEGATIVE_PROMPT = (
     "hard cuts, multiple shots, scene change, different room, different house, "
     "inconsistent TV wall, inconsistent sofa, inconsistent dining table, changing floor material, "
     "changing cabinet color, warped cabinet lines, distorted perspective, cartoon, CGI look, "
     "low quality, blurry, text, logo, watermark, people, shaky camera, fast camera movement"
 )
-
-
-def load_dotenv(path: Path) -> None:
-    if not path.exists():
-        return
-    for raw in path.read_text(encoding="utf-8", errors="replace").splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        key = key.strip()
-        value = value.strip().strip('"').strip("'")
-        if key and value and key not in os.environ:
-            os.environ[key] = value
 
 
 def load_config(path: Path) -> dict[str, Any]:
@@ -120,51 +107,36 @@ def main() -> int:
     out = out_dir / f"{output_name}_continuous_ai.mp4"
     result_path = out_dir / "generation_result.json"
 
-    load_dotenv(ROOT / ".env")
-    load_dotenv(REPO / ".env")
-    load_dotenv(Path.home() / ".hermes" / ".env")
-    if not os.environ.get("FAL_KEY", "").strip() or os.environ["FAL_KEY"].strip() == "your_fal_api_key_here":
-        write_failure(
-            result_path,
-            {
-                "status": "GENERATOR_NOT_READY",
-                "backend": "continuous_ai_video",
-                "provider": "fal",
-                "error": "FAL_KEY is not configured.",
-            },
-        )
-        print("GENERATOR_NOT_READY: continuous_ai_video FAL_KEY is not configured.")
-        return 2
-
+    load_default_env()
     try:
-        from plugins.video_gen.fal import FALVideoGenProvider
-    except Exception as exc:
+        provider = FALQueueVideoProvider()
+    except FALVideoGenerationError as exc:
         write_failure(
             result_path,
             {
                 "status": "GENERATOR_NOT_READY",
                 "backend": "continuous_ai_video",
                 "provider": "fal",
-                "provider_path": str(PROVIDER_PATH),
-                "error": f"Cannot import FALVideoGenProvider: {exc}",
+                "model": model,
+                "error": str(exc),
             },
         )
-        print(f"GENERATOR_NOT_READY: add provider at {PROVIDER_PATH}")
-        return 3
+        print(f"GENERATOR_NOT_READY: continuous_ai_video {exc}")
+        return 2
 
     bible = style_bible(config)
     prompt = style_bible_text(bible)
-    provider = FALVideoGenProvider()
-    generated = provider.generate(
-        prompt=prompt,
-        model=model,
-        duration=duration,
-        aspect_ratio="9:16",
-        resolution=args.resolution,
-        negative_prompt=str(bible.get("negative_prompt", NEGATIVE_PROMPT)),
-        audio=False,
-    )
-    if not generated.get("success"):
+    try:
+        generated = provider.generate(
+            prompt=prompt,
+            model=model,
+            duration=duration,
+            aspect_ratio="9:16",
+            resolution=args.resolution,
+            negative_prompt=str(bible.get("negative_prompt", NEGATIVE_PROMPT)),
+            audio=False,
+        )
+    except Exception as exc:
         write_failure(
             result_path,
             {
@@ -172,10 +144,10 @@ def main() -> int:
                 "backend": "continuous_ai_video",
                 "provider": "fal",
                 "model": model,
-                "error": generated.get("error", "unknown error"),
+                "error": str(exc),
             },
         )
-        print(f"GENERATION_FAILED: {generated.get('error', 'unknown error')}")
+        print(f"GENERATION_FAILED: {exc}")
         return 4
     video_url = generated.get("video")
     if not video_url:

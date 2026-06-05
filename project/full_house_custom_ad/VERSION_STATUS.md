@@ -4,6 +4,8 @@
 
 当前增量：v1.1-l1-auto-render
 
+后续增量：v1.1-l2-l3-fal-backend
+
 ## 已完成能力
 
 - L1：静态图 / gpt-image-2 关键帧 / 图片素材，可以制作样片风格伪漫游或高级图片展示。
@@ -69,3 +71,14 @@ v1.1 第一阶段只打通 L1 自动出片链路：
 5. 若未配置 `OPENAI_API_KEY` 或图片生成失败，只输出 `GENERATOR_NOT_READY` / prompt pack，不伪造图片。
 
 v1.1 L1 不改变 L4 门禁，不把静态关键帧视频称为真正 walkthrough。
+
+## v1.1 L2/L3 增量
+
+v1.1 后续阶段接顺 FAL 视频生成后端：
+
+1. `fal_video_provider.py` 使用 FAL queue HTTP API 直连生成视频；
+2. `generate_segmented_ai_walkthrough_clips_fal.py` 不再依赖外部 `plugins/video_gen/fal.py`，有 `FAL_KEY` 即可尝试生成多个 AI clip；
+3. 多个 AI clip 成功后只能标 L2：AI 分段空间漫游；
+4. `generate_continuous_ai_walkthrough_fal.py` 使用同一 provider 生成单条连续 AI video；
+5. 单条连续 AI video 成功后只能进入 L3 candidate，不自动标 L4；
+6. 未配置 `FAL_KEY` 时输出 `GENERATOR_NOT_READY`，不要求用户上传素材。

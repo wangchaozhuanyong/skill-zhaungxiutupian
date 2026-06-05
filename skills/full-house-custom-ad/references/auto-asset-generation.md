@@ -46,6 +46,15 @@ project.json
 
 如果没有 `OPENAI_API_KEY`，必须保留 prompt pack 并输出 `GENERATOR_NOT_READY`，不得假装已生成图片。图片生成成功后，成片仍然只能命名为 L1 样片风格伪漫游。
 
+## v1.1 L2/L3 FAL 后端
+
+v1.1 已内置 FAL queue provider：
+
+- `generate_segmented_ai_walkthrough_clips_fal.py`：有 `FAL_KEY` 时可直接生成多个 AI video clip，成功后标 L2。
+- `generate_continuous_ai_walkthrough_fal.py`：有 `FAL_KEY` 时可直接生成单条连续 AI video，成功后标 L3 candidate。
+- 两者都不得自动标 L4。
+- 未配置 `FAL_KEY` 时输出 `GENERATOR_NOT_READY`，不要求用户上传素材。
+
 ## 正确输出
 
 自动素材生成模式下，必须输出：

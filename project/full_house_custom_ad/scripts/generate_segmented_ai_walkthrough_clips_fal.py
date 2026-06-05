@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -21,9 +20,11 @@ sys.path.insert(0, str(REPO))
 import requests
 
 
+from scripts.fal_video_provider import FALQueueVideoProvider, FALVideoGenerationError, load_default_env
+
+
 DEFAULT_CLIP_DIR = ROOT / "ai_clips" / "segmented_ai_walkthrough_19s"
 ASSEMBLER = ROOT / "scripts" / "assemble_segmented_ai_walkthrough_clips.py"
-PROVIDER_PATH = ROOT / "plugins" / "video_gen" / "fal.py"
 NEGATIVE_PROMPT = (
     "cartoon, animation, CGI look, low quality, blurry, distorted room, "
     "distorted wide angle, warped cabinet lines, messy clutter, harsh lighting, "
@@ -95,20 +96,6 @@ DEFAULT_CLIPS = [
         "Slow cinematic close-up along the same wood veneer, stone texture, hidden LED strip and precise cabinet gaps, then settles on a clean cabinet wall.",
     ),
 ]
-
-
-def load_dotenv(path: Path) -> None:
-    if not path.exists():
-        return
-    for raw in path.read_text(encoding="utf-8", errors="replace").splitlines():
-        line = raw.strip()
-        if not line or line.startswith("#") or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        key = key.strip()
-        value = value.strip().strip('"').strip("'")
-        if key and value and key not in os.environ:
-            os.environ[key] = value
 
 
 def load_config(path: Path | None) -> dict[str, Any]:
@@ -240,10 +227,10 @@ def main() -> int:
     assert out_dir is not None
     result_path = out_dir / "generation_result.json"
 
-    load_dotenv(ROOT / ".env")
-    load_dotenv(REPO / ".env")
-    load_dotenv(Path.home() / ".hermes" / ".env")
-    if not os.environ.get("FAL_KEY", "").strip() or os.environ["FAL_KEY"].strip() == "your_fal_api_key_here":
+    load_default_env()
+    try:
+        provider = FALQueueVideoProvider()
+    except FALVideoGenerationError as exc:
         write_generation_result(
             result_path,
             {
@@ -254,10 +241,10 @@ def main() -> int:
                 "clip_count": 0,
                 "provider": "fal",
                 "model": model,
-                "error": "FAL_KEY is not configured.",
+                "error": str(exc),
             },
         )
-        print("FAL_KEY is not configured.")
+        print(f"GENERATOR_NOT_READY: {exc}")
         print("Add it to one of these files:")
         print(f"- {ROOT / '.env'}")
         print(f"- {REPO / '.env'}")
@@ -266,30 +253,6 @@ def main() -> int:
         return 2
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    try:
-        from plugins.video_gen.fal import FALVideoGenProvider
-    except Exception as exc:
-        write_generation_result(
-            result_path,
-            {
-                "status": "GENERATOR_NOT_READY",
-                "generated_source_type": "segmented_ai_clips",
-                "generated_capability_level": "L2",
-                "source_clips_dir": str(out_dir),
-                "clip_count": 0,
-                "provider": "fal",
-                "model": model,
-                "provider_path": str(PROVIDER_PATH),
-                "error": f"Cannot import FALVideoGenProvider: {exc}",
-            },
-        )
-        print("Cannot import FALVideoGenProvider.")
-        print("This repository does not include the video generation provider implementation.")
-        print(f"Install or add the provider at {PROVIDER_PATH}, then run this script again.")
-        print(f"Original import error: {exc}")
-        return 3
-
-    provider = FALVideoGenProvider()
     style_bible = style_bible_from_config(config)
     try:
         for clip in clips_from_config(config):
