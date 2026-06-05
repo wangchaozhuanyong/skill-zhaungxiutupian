@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import re
@@ -21,6 +22,18 @@ VIDEO_EXTS = {".mp4", ".mov", ".m4v", ".webm"}
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp"}
 L_ORDER = {"L0": 0, "L1": 1, "L2": 2, "L3": 3, "L4": 4}
 VISUAL_SAMPLE_COUNT = 32
+SEMANTIC_POSITIVE_CHECKS = [
+    "电视墙是否一致",
+    "沙发是否一致",
+    "餐桌是否一致",
+    "地面材质是否一致",
+    "柜体颜色是否一致",
+    "灯光色温是否一致",
+    "空间比例是否一致",
+    "镜头路径是否连续",
+    "是否达到样片发布级",
+]
+SEMANTIC_NEGATIVE_CHECKS = ["是否存在明显换房"]
 
 
 def load_config(path: Path | None) -> dict[str, Any]:
@@ -44,6 +57,16 @@ def collect_files(path: Path | None, exts: set[str]) -> list[Path]:
     if path.is_file():
         return [path] if path.suffix.lower() in exts else []
     return sorted(p for p in path.rglob("*") if p.is_file() and p.suffix.lower() in exts)
+
+
+def file_hash(path: Path | None) -> str:
+    if not path or not path.exists():
+        return ""
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def source_from_config(config: dict[str, Any], key: str) -> Path | None:
@@ -73,6 +96,117 @@ def all_l4_checks_passed(config: dict[str, Any]) -> bool:
         "publish_ready_realism",
     ]
     return all(checks.get(key) is True for key in required)
+
+
+def review_path_from_config(config: dict[str, Any], output_name: str) -> Path | None:
+    value = config.get("manual_semantic_review_file")
+    if isinstance(value, str) and value.strip():
+        return resolve_path(value)
+    return OUT_DIR / f"{output_name}_semantic_review.md"
+
+
+def line_value(text: str, label: str) -> str:
+    match = re.search(rf"^{re.escape(label)}\s*[:：]\s*(.+?)\s*$", text, flags=re.MULTILINE)
+    return match.group(1).strip() if match else ""
+
+
+def selected_choice(line: str) -> str:
+    checked_yes = re.search(r"\[[xX✓✔]\]\s*是", line) is not None
+    checked_no = re.search(r"\[[xX✓✔]\]\s*否", line) is not None
+    checked_pass = re.search(r"\[[xX✓✔]\]\s*通过", line) is not None
+    checked_fail = re.search(r"\[[xX✓✔]\]\s*不通过", line) is not None
+    if checked_yes:
+        return "是"
+    if checked_no:
+        return "否"
+    if checked_pass:
+        return "通过"
+    if checked_fail:
+        return "不通过"
+    value = line.split("：", 1)[-1].split(":", 1)[-1].strip()
+    if value.startswith("是"):
+        return "是"
+    if value.startswith("否"):
+        return "否"
+    if value.startswith("通过"):
+        return "通过"
+    if value.startswith("不通过"):
+        return "不通过"
+    return ""
+
+
+def review_check_value(text: str, label: str) -> str:
+    for raw in text.splitlines():
+        line = raw.strip()
+        if re.match(rf"^(?:[-*]\s*)?{re.escape(label)}\s*[:：]", line):
+            return selected_choice(line)
+    return ""
+
+
+def semantic_review_status(config: dict[str, Any], project_id: str, output_name: str, source_video: Path | None) -> dict[str, Any]:
+    path = review_path_from_config(config, output_name)
+    result: dict[str, Any] = {
+        "semantic_review_file": str(path) if path else "",
+        "semantic_review_file_exists": bool(path and path.exists()),
+        "semantic_review_file_valid": False,
+        "semantic_review_errors": [],
+        "semantic_review_checks": {},
+        "semantic_review_reviewer": "",
+        "semantic_review_date": "",
+        "semantic_review_conclusion": "",
+        "semantic_review_source_hash": "",
+        "semantic_review_expected_source_hash": file_hash(source_video),
+    }
+    errors: list[str] = result["semantic_review_errors"]
+    if not path:
+        errors.append("未配置人工空间语义复核文件。")
+        return result
+    if not path.exists():
+        errors.append(f"人工空间语义复核文件不存在：{path}")
+        return result
+
+    text = path.read_text(encoding="utf-8", errors="replace")
+    file_project_id = line_value(text, "项目 ID")
+    if file_project_id != project_id:
+        errors.append(f"复核文件项目 ID 不匹配：{file_project_id or '未填写'} != {project_id}")
+
+    reviewer = line_value(text, "人工复核人")
+    review_date = line_value(text, "复核日期")
+    result["semantic_review_reviewer"] = reviewer
+    result["semantic_review_date"] = review_date
+    if not reviewer:
+        errors.append("人工复核人未填写。")
+    if not review_date:
+        errors.append("复核日期未填写。")
+
+    review_hash = line_value(text, "源视频 hash")
+    expected_hash = result["semantic_review_expected_source_hash"]
+    result["semantic_review_source_hash"] = review_hash
+    if expected_hash and review_hash != expected_hash:
+        errors.append("复核文件源视频 hash 与当前 source_video 不匹配。")
+    if not expected_hash:
+        errors.append("当前没有可校验的 source_video hash。")
+
+    checks: dict[str, str] = {}
+    for label in SEMANTIC_POSITIVE_CHECKS:
+        value = review_check_value(text, label)
+        checks[label] = value
+        if value != "是":
+            errors.append(f"{label} 未勾选“是”。")
+    for label in SEMANTIC_NEGATIVE_CHECKS:
+        value = review_check_value(text, label)
+        checks[label] = value
+        if value != "否":
+            errors.append(f"{label} 必须勾选“否”。")
+    result["semantic_review_checks"] = checks
+
+    conclusion = review_check_value(text, "复核结论")
+    result["semantic_review_conclusion"] = conclusion
+    if conclusion != "通过":
+        errors.append("复核结论未勾选“通过”。")
+
+    result["semantic_review_file_valid"] = len(errors) == 0
+    return result
 
 
 def labels_for_level(level: str) -> tuple[list[str], list[str]]:
@@ -393,6 +527,8 @@ def assess(args: argparse.Namespace, config: dict[str, Any]) -> dict[str, Any]:
     image_files = collect_files(images_dir, IMAGE_EXTS)
     clip_files = collect_files(clips_dir, VIDEO_EXTS)
     video_files = collect_files(video, VIDEO_EXTS)
+    semantic_review = semantic_review_status(config, project_id, output_name, video)
+    semantic_review_passed = bool(semantic_review["semantic_review_file_valid"])
 
     is_static = bool(image_files) or source_type in {"static_images", "static_images_no_depth"}
     is_multi_clip = len(clip_files) > 1 or source_type in {"segmented_ai_clips", "multi_ai_clips"}
@@ -438,14 +574,13 @@ def assess(args: argparse.Namespace, config: dict[str, Any]) -> dict[str, Any]:
             and visual["motion_continuity_risk"] != "high"
         )
         l4_base_gate_ok = all_l4_checks_passed(config) and l4_visual_ok
-        manual_semantic_review_passed = bool(config.get("manual_semantic_review_passed"))
         if source_type in {"real_video", "3d_walkthrough", "continuous_ai_video"} or config.get("single_continuous_video"):
-            if l4_base_gate_ok and manual_semantic_review_passed:
+            if l4_base_gate_ok and semantic_review_passed:
                 level = "L4"
-                reasons.append("素材是单条连续视频，基础视觉门禁和人工空间语义复核均支持 L4。")
+                reasons.append("素材是单条连续视频，基础视觉门禁和人工空间语义复核文件均支持 L4。")
             elif l4_base_gate_ok:
                 level = "L3"
-                reasons.append("素材是单条连续视频，已达到 L4 基础视觉门禁候选；最终 L4 仍需人工空间语义复核。")
+                reasons.append("素材是单条连续视频，已达到 L4 基础视觉门禁候选；最终 L4 仍需有效的人工空间语义复核文件。")
             else:
                 level = "L3"
                 reasons.append("素材是单条连续视频，可能达到真正空间漫游；L4 还需要全部连续性检查、低硬切风险和人工空间语义复核。")
@@ -463,8 +598,11 @@ def assess(args: argparse.Namespace, config: dict[str, Any]) -> dict[str, Any]:
         reasons.append("目标为 L4，但没有可审查的关键帧视觉证据。")
     if expected_level(config) == "L4" and visual["hard_cut_risk"] == "high":
         reasons.append("目标为 L4，但关键帧差异显示硬切/空间断裂风险高。")
-    if expected_level(config) == "L4" and not bool(config.get("manual_semantic_review_passed")):
-        reasons.append("目标为 L4，但脚本只能提供基础视觉门禁；最终样片级命名需要人工空间语义复核通过。")
+    if expected_level(config) == "L4" and not semantic_review_passed:
+        reasons.append("目标为 L4，但人工空间语义复核文件未通过；最终样片级命名需要有效复核记录。")
+        reasons.extend(str(item) for item in semantic_review["semantic_review_errors"])
+    if expected_level(config) == "L4" and bool(config.get("manual_semantic_review_passed")) and not semantic_review_passed:
+        reasons.append("project.json 中的 manual_semantic_review_passed=true 不能单独作为 L4 通过依据。")
 
     allowed, forbidden = labels_for_level(level)
     exp = expected_level(config)
@@ -475,7 +613,7 @@ def assess(args: argparse.Namespace, config: dict[str, Any]) -> dict[str, Any]:
             and level == "L4"
             and visual["visual_evidence_available"]
             and visual["hard_cut_risk"] != "high"
-            and bool(config.get("manual_semantic_review_passed"))
+            and semantic_review_passed
         )
     if exp and not passes_expected:
         reasons.append(f"目标要求 {exp}，当前只能达到 {level}。")
@@ -491,7 +629,7 @@ def assess(args: argparse.Namespace, config: dict[str, Any]) -> dict[str, Any]:
         or (exp in {"L3", "L4"} and not visual["visual_evidence_available"])
         or (exp == "L4" and level != "L4")
         or visual["hard_cut_risk"] in {"medium", "high"}
-        or (exp == "L4" and not bool(config.get("manual_semantic_review_passed")))
+        or (exp == "L4" and not semantic_review_passed)
     )
     if exp == "L4":
         l4_base_candidate = bool(
@@ -529,8 +667,9 @@ def assess(args: argparse.Namespace, config: dict[str, Any]) -> dict[str, Any]:
         "reasons": reasons,
         "manual_review_required": manual_review_required,
         "semantic_review_required": exp == "L4" or level == "L4",
-        "manual_semantic_review_passed": bool(config.get("manual_semantic_review_passed")),
+        "manual_semantic_review_passed": semantic_review_passed,
         "l4_gate_result": l4_gate_result,
+        **semantic_review,
         **visual,
     }
 
@@ -547,6 +686,10 @@ def report_markdown(result: dict[str, Any]) -> str:
     labels = "\n".join(f"- {label}" for label in result["clip_labels"]) or "- 未提供"
     keyframe_sheet = result["keyframe_sheet"] or "未生成"
     max_delta_pair_sheet = result["max_delta_pair_sheet"] or "未生成"
+    semantic_errors = "\n".join(f"- {item}" for item in result["semantic_review_errors"]) or "- 无"
+    semantic_checks = "\n".join(
+        f"| {key} | {value or '未勾选'} |" for key, value in result["semantic_review_checks"].items()
+    ) or "| 未提供 | 未勾选 |"
     return f"""# Walkthrough Continuity Report
 
 项目：{result['project_id']}
@@ -584,6 +727,24 @@ def report_markdown(result: dict[str, Any]) -> str:
 - 硬切风险：{result['hard_cut_risk']}
 - 运动连续性风险：{result['motion_continuity_risk']}
 - 说明：{result['visual_evidence_note']}
+
+## 人工空间语义复核
+
+- 复核文件：`{result['semantic_review_file'] or '未配置'}`
+- 复核文件存在：{yes(result['semantic_review_file_exists'])}
+- 复核文件有效：{yes(result['semantic_review_file_valid'])}
+- 人工复核人：{result['semantic_review_reviewer'] or '未填写'}
+- 复核日期：{result['semantic_review_date'] or '未填写'}
+- 复核结论：{result['semantic_review_conclusion'] or '未填写'}
+- 源视频 hash 匹配：{yes(bool(result['semantic_review_source_hash']) and result['semantic_review_source_hash'] == result['semantic_review_expected_source_hash'])}
+
+| 复核项 | 选择 |
+|---|---|
+{semantic_checks}
+
+复核问题：
+
+{semantic_errors}
 
 ## 允许标记为
 

@@ -16,5 +16,31 @@
   "color_grade": "low_saturation_warm_grey_preserve_dark_cabinet_weight",
   "style": "高端全屋定制",
   "allow_downgrade": true,
-  "output_name": "example_static_image_l1_template"
+  "output_name": "example_static_image_l1_template",
+  "shots": [
+    {
+      "filename": "entry_or_foyer.jpg",
+      "shot_type": "entry",
+      "motion": "edge_push",
+      "label": "玄关入口柜体推进"
+    },
+    {
+      "filename": "living_room.jpg",
+      "shot_type": "living_room_opening",
+      "motion": "slow_lateral_reveal",
+      "label": "客厅大景慢横移打开"
+    },
+    {
+      "filename": "tv_wall.jpg",
+      "shot_type": "tv_wall_focus",
+      "motion": "push_to_center",
+      "label": "电视墙主视觉轻推"
+    },
+    {
+      "filename": "material_detail.jpg",
+      "shot_type": "material_detail",
+      "motion": "micro_push",
+      "label": "材质细节小幅稳定推进"
+    }
+  ]
 }

@@ -16,6 +16,7 @@
   "style": "高端全屋定制",
   "allow_downgrade": true,
   "manual_semantic_review_passed": false,
+  "manual_semantic_review_file": "output/example_continuous_video_template_semantic_review.md",
   "output_name": "example_continuous_video_template",
   "continuity_checks": {
     "same_space_path": false,

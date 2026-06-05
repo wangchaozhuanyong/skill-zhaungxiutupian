@@ -17,6 +17,7 @@
   "style": "意式轻奢",
   "allow_downgrade": false,
   "manual_semantic_review_passed": false,
+  "manual_semantic_review_file": "output/example_l4_target_missing_assets_semantic_review.md",
   "output_name": "example_l4_target_missing_assets",
   "continuity_checks": {
     "same_space_path": false,

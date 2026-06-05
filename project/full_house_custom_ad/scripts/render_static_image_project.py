@@ -81,6 +81,65 @@ def collect_images(path: Path | None) -> list[Path]:
     return sorted(p for p in path.rglob("*") if p.is_file() and p.suffix.lower() in IMAGE_EXTS)
 
 
+def infer_shot_type(path: Path, index: int, total: int) -> str:
+    name = path.stem.lower()
+    keyword_map = [
+        ("entry", ["entry", "foyer", "玄关", "入户", "门厅"]),
+        ("living_room_opening", ["living", "客厅", "横厅", "沙发", "open"]),
+        ("tv_wall_focus", ["tv", "电视", "背景墙", "岩板"]),
+        ("dining_slide", ["dining", "餐厅", "餐桌", "餐厨", "sideboard", "餐边柜"]),
+        ("material_detail", ["detail", "material", "close", "材质", "细节", "灯带", "柜门", "木饰面"]),
+        ("final_wide", ["wide", "final", "大景", "全景", "收尾"]),
+    ]
+    for shot_type, keywords in keyword_map:
+        if any(keyword in name for keyword in keywords):
+            return shot_type
+    if index == 0:
+        return "entry"
+    if index == total - 1:
+        return "final_wide"
+    return "living_room_opening"
+
+
+def shot_items_from_config(config: dict[str, Any], images: list[Path]) -> list[dict[str, Any]]:
+    images_dir = resolve_path(config.get("source_images_dir"))
+    raw = config.get("shots")
+    items: list[dict[str, Any]] = []
+    if isinstance(raw, list):
+        for index, item in enumerate(raw):
+            if not isinstance(item, dict):
+                continue
+            filename = str(item.get("filename", "")).strip()
+            if not filename:
+                continue
+            path = Path(filename)
+            if not path.is_absolute():
+                path = (images_dir or ROOT) / path
+            if not path.exists() or path.suffix.lower() not in IMAGE_EXTS:
+                continue
+            items.append(
+                {
+                    "path": path,
+                    "shot_type": str(item.get("shot_type", infer_shot_type(path, index, len(raw)))),
+                    "motion": str(item.get("motion", "")),
+                    "label": str(item.get("label", path.stem)),
+                    "duration": item.get("duration"),
+                }
+            )
+    if items:
+        return items
+    return [
+        {
+            "path": image,
+            "shot_type": infer_shot_type(image, index, len(images)),
+            "motion": "",
+            "label": image.stem,
+            "duration": None,
+        }
+        for index, image in enumerate(images)
+    ]
+
+
 def get_duration(path: Path) -> float:
     proc = run([ffmpeg_exe(), "-hide_banner", "-i", str(path)], check=False)
     text = "\n".join([proc.stdout, proc.stderr])
@@ -91,30 +150,64 @@ def get_duration(path: Path) -> float:
     return int(h) * 3600 + int(m) * 60 + float(s)
 
 
-def choose_images_and_duration(config: dict[str, Any], images: list[Path], music: Path | None) -> tuple[list[Path], float, float]:
+def choose_images_and_duration(config: dict[str, Any], items: list[dict[str, Any]], music: Path | None) -> tuple[list[dict[str, Any]], float, float]:
     per_image = float(config.get("per_image_duration", 4.2) or 4.2)
     requested_duration = float(config.get("duration", 0) or 0)
     music_duration = get_duration(music) if music and music.exists() else 0.0
     total = requested_duration if requested_duration > 0 else music_duration
     if total <= 0:
-        total = min(len(images), 8) * per_image
+        total = min(len(items), 8) * per_image
     min_per_image = 2.8
-    max_images = max(1, int(total // min_per_image)) if total > 0 else len(images)
-    if len(images) > max_images:
-        images = images[:max_images]
-    duration = max(total / max(1, len(images)), min_per_image)
-    total = duration * len(images)
-    return images, duration, total
+    max_images = max(1, int(total // min_per_image)) if total > 0 else len(items)
+    if len(items) > max_images:
+        items = items[:max_images]
+    duration = max(total / max(1, len(items)), min_per_image)
+    total = duration * len(items)
+    for item in items:
+        if item.get("duration"):
+            try:
+                item["computed_duration"] = max(float(item["duration"]), min_per_image)
+            except (TypeError, ValueError):
+                item["computed_duration"] = duration
+        else:
+            item["computed_duration"] = duration
+    total = sum(float(item["computed_duration"]) for item in items)
+    return items, duration, total
 
 
-def render_image_clip(src: Path, dst: Path, duration: float, width: int, height: int, fps: int, index: int) -> None:
+def motion_profile(shot_type: str, motion: str, index: int) -> tuple[float, float, float, float, float, str]:
+    key = motion or shot_type
+    profiles = {
+        "edge_push": (0.060, 0.08, 0.42, 0.30, 0.34, "柜体边缘推进"),
+        "entry": (0.060, 0.08, 0.42, 0.30, 0.34, "玄关入口柜体边缘推进"),
+        "slow_lateral_reveal": (0.050, 0.12, 0.58, 0.34, 0.34, "慢横移打开空间"),
+        "living_room_opening": (0.050, 0.12, 0.58, 0.34, 0.34, "客厅大景慢横移打开"),
+        "push_to_center": (0.065, 0.36, 0.45, 0.32, 0.36, "轻推主视觉"),
+        "tv_wall_focus": (0.065, 0.36, 0.45, 0.32, 0.36, "电视墙主视觉轻推"),
+        "dining_slide": (0.050, 0.22, 0.64, 0.36, 0.32, "横移经过餐桌"),
+        "material_detail": (0.035, 0.44, 0.47, 0.42, 0.40, "材质细节小幅稳定推进"),
+        "micro_push": (0.035, 0.44, 0.47, 0.42, 0.40, "小幅稳定推进"),
+        "final_wide": (0.018, 0.48, 0.50, 0.35, 0.35, "收尾大景轻微定住"),
+        "settle": (0.018, 0.48, 0.50, 0.35, 0.35, "轻微定住"),
+    }
+    if key in profiles:
+        return profiles[key]
+    if index % 2 == 0:
+        return (0.052, 0.18, 0.55, 0.26, 0.40, "默认慢推横移")
+    return (0.052, 0.55, 0.24, 0.38, 0.28, "默认反向横移")
+
+
+def render_image_clip(item: dict[str, Any], dst: Path, width: int, height: int, fps: int, index: int) -> str:
+    src = Path(item["path"])
+    duration = float(item["computed_duration"])
     frames = max(1, int(round(duration * fps)))
     fade_out = max(0.0, duration - 0.25)
-    start_x, end_x = (0.18, 0.55) if index % 2 == 0 else (0.55, 0.24)
-    start_y, end_y = (0.26, 0.40) if index % 3 == 0 else (0.38, 0.28)
+    zoom_amount, start_x, end_x, start_y, end_y, description = motion_profile(
+        str(item.get("shot_type", "")), str(item.get("motion", "")), index
+    )
     zoompan = (
         "zoompan="
-        f"z='1+0.052*on/{frames}':"
+        f"z='1+{zoom_amount:.3f}*on/{frames}':"
         f"x='(iw-iw/zoom)*({start_x:.3f}+({end_x:.3f}-{start_x:.3f})*on/{frames})':"
         f"y='(ih-ih/zoom)*({start_y:.3f}+({end_y:.3f}-{start_y:.3f})*on/{frames})':"
         f"d={frames}:s={width}x{height}:fps={fps}"
@@ -160,6 +253,8 @@ def render_image_clip(src: Path, dst: Path, duration: float, width: int, height:
             str(dst),
         ]
     )
+    item["motion_description"] = description
+    return description
 
 
 def concat_clips(clips: list[Path], output_name: str, video_only: Path) -> None:
@@ -270,13 +365,16 @@ def run_validator(config_path: Path, images_dir: Path, output_name: str) -> tupl
     return data, report
 
 
-def update_manifest(project_id: str, images: list[Path], music: Path | None) -> None:
+def update_manifest(project_id: str, items: list[dict[str, Any]], music: Path | None) -> None:
     manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8")) if MANIFEST_PATH.exists() else {}
-    for image in images:
+    for item in items:
+        image = Path(item["path"])
         key = rel(image)
         entry = manifest.setdefault(key, {})
         entry["hash"] = file_hash(image)
         entry["asset_type"] = "static_image_keyframe"
+        entry["shot_type"] = str(item.get("shot_type", ""))
+        entry["motion"] = str(item.get("motion") or item.get("motion_description", ""))
         entry["capability_level"] = "L1"
         entry["suitable_for_pseudo_walkthrough"] = True
         entry["suitable_for_true_walkthrough"] = False
@@ -303,14 +401,20 @@ def write_plan(
     video_only: Path,
     preview: Path,
     report: Path,
-    images: list[Path],
+    items: list[dict[str, Any]],
     music: Path | None,
     audio_note: str,
     duration: float,
     per_image_duration: float,
     config: dict[str, Any],
 ) -> None:
-    rows = "\n".join(f"| {index + 1} | `{rel(path)}` | {per_image_duration:.2f}s |" for index, path in enumerate(images))
+    rows = "\n".join(
+        (
+            f"| {index + 1} | `{rel(Path(item['path']))}` | {item.get('shot_type', '')} | "
+            f"{item.get('motion_description', item.get('motion', ''))} | {float(item['computed_duration']):.2f}s |"
+        )
+        for index, item in enumerate(items)
+    )
     plan.write_text(
         f"""# L1 样片风格伪漫游成片记录
 
@@ -327,7 +431,7 @@ def write_plan(
 ## 输入
 
 - 项目：`{config.get('project_id', '')}`
-- 图片数量：{len(images)}
+- 图片数量：{len(items)}
 - 音乐：`{rel(music) if music else '未提供'}`
 - 音频处理：{audio_note}
 
@@ -341,8 +445,8 @@ def write_plan(
 
 ## 图片顺序
 
-| 序号 | 图片 | 时长 |
-|---:|---|---:|
+| 序号 | 图片 | shot_type | 运镜 | 时长 |
+|---:|---|---|---|---:|
 {rows}
 
 ## 样片级专项评分
@@ -383,20 +487,27 @@ def main() -> int:
     if music and not music.exists():
         print(f"音乐不存在，将输出无指定音乐版：{music}", file=sys.stderr)
         music = None
-    images, per_image_duration, duration = choose_images_and_duration(config, images, music)
+    items = shot_items_from_config(config, images)
+    items, per_image_duration, duration = choose_images_and_duration(config, items, music)
     width, height = parse_resolution(str(config.get("resolution", "1080x1920")))
     fps = int(config.get("fps", 60))
 
-    continuity_report, report_path = run_validator(config_path, images_dir or images[0].parent, output_name)
+    first_image_parent = Path(items[0]["path"]).parent
+    continuity_report, report_path = run_validator(config_path, images_dir or first_image_parent, output_name)
     if continuity_report.get("assessed_capability_level") not in {"L1", "L0"}:
         print("静态图项目连续性报告异常：未被识别为 L1/L0。", file=sys.stderr)
         return 3
 
     tmp_clips: list[Path] = []
-    for index, image in enumerate(images):
+    for index, item in enumerate(items):
+        image = Path(item["path"])
         clip = OUT_DIR / f"tmp_{output_name}_static_{index:02d}.mp4"
-        print(f"rendering static keyframe {index + 1}/{len(images)}: {image.name}", flush=True)
-        render_image_clip(image, clip, per_image_duration, width, height, fps, index)
+        print(
+            f"rendering static keyframe {index + 1}/{len(items)}: {image.name} "
+            f"({item.get('shot_type', '')})",
+            flush=True,
+        )
+        render_image_clip(item, clip, width, height, fps, index)
         tmp_clips.append(clip)
 
     video_only = OUT_DIR / f"{output_name}_video_only.mp4"
@@ -406,14 +517,14 @@ def main() -> int:
     concat_clips(tmp_clips, output_name, video_only)
     audio_note = mux_music(video_only, music, final, duration)
     make_preview(final, preview, duration, output_name)
-    update_manifest(project_id, images, music)
+    update_manifest(project_id, items, music)
     write_plan(
         plan=plan,
         final=final,
         video_only=video_only,
         preview=preview,
         report=report_path,
-        images=images,
+        items=items,
         music=music,
         audio_note=audio_note,
         duration=duration,

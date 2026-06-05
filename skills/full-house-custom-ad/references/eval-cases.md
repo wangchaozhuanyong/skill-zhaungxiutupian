@@ -52,6 +52,7 @@
 - capability level 至少是 L3，只有通过连续性检查才可标为 L4。
 - 输出调色、节奏、字幕、音乐和导出方案。
 - 不转成图片方案。
+- 如果要最终标 L4，必须生成并通过人工空间语义复核文件。
 
 ## 用户有多个 AI clip
 
@@ -115,7 +116,7 @@ capability_level=L3
 - `render_project.py` 必须调用 `render_continuous_video_project.py`。
 - 输出 mp4、preview、plan、continuity report。
 - capability level 至少可为 L3。
-- 只有基础视觉门禁和人工空间语义复核都通过，才可以最终标为 L4。
+- 只有基础视觉门禁和有效人工空间语义复核文件都通过，才可以最终标为 L4。
 
 ## 多个 AI clip 但用户坚持说样片级
 
@@ -140,14 +141,14 @@ capability_level=L3
 capability_level=L4
 continuity_checks 全部 true
 source_video=""
-manual_semantic_review_passed=false
+manual_semantic_review_file=output/example_semantic_review.md
 ```
 
 期望行为：
 
 - 不得通过 L4。
 - `--fail-on-overclaim` 必须失败。
-- 报告必须说明缺少关键帧视觉证据和人工空间语义复核。
+- 报告必须说明缺少关键帧视觉证据和有效人工空间语义复核文件。
 - 不能只因为 project.json 声明 true 就称为样片级。
 
 ## 静态图项目
@@ -176,7 +177,7 @@ source_type=real_video
 source_video=/path/to/continuous.mp4
 capability_level=L4
 continuity_checks 全部 true
-manual_semantic_review_passed=false
+manual_semantic_review_file=output/example_semantic_review.md
 ```
 
 期望行为：
@@ -184,7 +185,27 @@ manual_semantic_review_passed=false
 - 如果关键帧证据和硬切风险通过，`l4_gate_result` 可为 candidate。
 - candidate 不等于 L4 通过。
 - `passes_expected_level` 应为 false。
-- 只有 `manual_semantic_review_passed=true` 且专项评分达标，才允许最终 L4。
+- 只有 `manual_semantic_review_file` 存在且有效、专项评分达标，才允许最终 L4。
+
+## L4 配置布尔值为 true 但没有复核文件
+
+项目配置：
+
+```text
+source_type=real_video
+source_video=/path/to/continuous.mp4
+capability_level=L4
+continuity_checks 全部 true
+manual_semantic_review_passed=true
+manual_semantic_review_file 缺失或文件不存在
+```
+
+期望行为：
+
+- 不得通过 L4。
+- `--fail-on-overclaim` 必须失败。
+- 报告必须说明 `manual_semantic_review_passed=true` 不能单独作为 L4 通过依据。
+- 报告必须指出缺少有效人工空间语义复核文件。
 
 ## 验收标准
 
@@ -202,5 +223,6 @@ manual_semantic_review_passed=false
 12. L4 目标但没有素材时，脚本必须报告缺素材或过度声明失败，不得生成假 L4。
 13. `source_video` 存在且是连续视频来源时，`render_project.py` 必须调用 continuous renderer。
 14. 静态图项目必须调用 L1 static renderer 或返回明确缺口，不得冒充完成。
-15. continuity report 必须包含关键帧拼图、最大跳变帧对、抽帧数量、硬切风险、运动连续性风险、L4 门禁结果和人工语义复核标记。
-16. `continuity_checks` 全 true 但没有视觉证据或人工语义复核时，不得通过 L4。
+15. continuity report 必须包含关键帧拼图、最大跳变帧对、抽帧数量、硬切风险、运动连续性风险、L4 门禁结果和人工语义复核文件状态。
+16. `continuity_checks` 全 true 但没有视觉证据或有效人工语义复核文件时，不得通过 L4。
+17. `manual_semantic_review_passed=true` 但没有有效 `manual_semantic_review_file` 时，不得通过 L4。

@@ -45,6 +45,8 @@ python scripts/render_project.py --config projects/example_l4_target_missing_ass
 
 上面这个命令只用于检查 L4 目标模板，不会直接生成视频；报告会说明当前缺素材，不能通过 L4。样片级连续空间漫游必须先填写真实连续视频、专业 3D 漫游导出或单条连续 AI video。
 
+如果只是查看 L4 缺素材报告，可以使用 `--allow-downgrade`。如果要验证系统是否会拦截 L4 过度声明，请去掉 `--allow-downgrade`，此时不满足 L4 会返回失败码。
+
 连续视频后期模板：
 
 ```bash
@@ -60,6 +62,24 @@ cd project/full_house_custom_ad
 # 先把 projects/example_static_image_l1_template/project.json 里的 source_images_dir 改成图片目录
 python scripts/render_project.py --config projects/example_static_image_l1_template/project.json
 ```
+
+L2 分段 AI 漫游模板：
+
+```bash
+cd project/full_house_custom_ad
+python scripts/render_project.py --config projects/example_segmented_ai_walkthrough/project.json
+```
+
+L2 模板需要先准备 `source_clips_dir` 里的多个 AI video clip。它只能默认标注为 AI 分段空间漫游，不是 L4 样片级连续 walkthrough。
+
+L4 人工空间语义复核模板：
+
+```bash
+cd project/full_house_custom_ad
+python scripts/create_semantic_review_template.py --config projects/example_continuous_video_template/project.json --reviewer "你的名字"
+```
+
+L4 最终通过不能只改 `project.json`。必须保留 `output/<project>_semantic_review.md` 人工空间语义复核记录，且 validator 会校验项目 ID、源视频 hash、逐项复核勾选和最终结论。
 
 `render_project.py` 会先生成连续性报告，再按素材类型路由：
 
@@ -98,9 +118,9 @@ project/full_house_custom_ad/music_library/mp3/
 - L1：样片风格伪漫游，gpt-image-2 静态关键帧 + 本地运镜。
 - L2：AI 分段空间漫游，多个 AI video clip 拼接，但不保证同一空间连续性。
 - L3：真正空间漫游，真实连续视频、专业 3D 漫游导出，或单条连续 AI video。
-- L4：样片级连续空间漫游，必须满足同一空间连续路径、连续视差、少硬切、材质灯光比例稳定、发布级真实感和人工空间语义复核。
+- L4：样片级连续空间漫游，必须满足同一空间连续路径、连续视差、少硬切、材质灯光比例稳定、发布级真实感和人工空间语义复核文件校验。
 
-缺少连续素材时，可以用 gpt-image-2 做高质量关键帧和 L1 伪漫游，但不能把它叫真正 walkthrough。多个独立 AI clip 默认是 L2；没有连续性报告、关键帧视觉证据和人工空间语义复核，不得叫 L4 样片级连续空间漫游。
+缺少连续素材时，可以用 gpt-image-2 做高质量关键帧和 L1 伪漫游，但不能把它叫真正 walkthrough。多个独立 AI clip 默认是 L2；没有连续性报告、关键帧视觉证据和有效人工空间语义复核文件，不得叫 L4 样片级连续空间漫游。
 
 ## FAL 分段 AI video
 
@@ -126,4 +146,4 @@ project/full_house_custom_ad/plugins/video_gen/fal.py
 
 ## 备注
 
-真正空间漫游需要真实连续视频、AI 连续视频或专业 3D 漫游素材。样片级连续空间漫游还必须通过连续性检查、专项评分和人工空间语义复核。缺少连续素材时，skill 可以继续执行高质量降级方案，但必须清楚标注为图片展示、样片风格伪漫游或 AI 分段空间漫游，不能冒充同款样片级 walkthrough。
+真正空间漫游需要真实连续视频、AI 连续视频或专业 3D 漫游素材。样片级连续空间漫游还必须通过连续性检查、专项评分和人工空间语义复核文件校验。缺少连续素材时，skill 可以继续执行高质量降级方案，但必须清楚标注为图片展示、样片风格伪漫游或 AI 分段空间漫游，不能冒充同款样片级 walkthrough。
