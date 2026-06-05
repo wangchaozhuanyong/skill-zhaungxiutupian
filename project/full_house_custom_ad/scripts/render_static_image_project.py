@@ -122,6 +122,7 @@ def shot_items_from_config(config: dict[str, Any], images: list[Path]) -> list[d
                     "path": path,
                     "shot_type": str(item.get("shot_type", infer_shot_type(path, index, len(raw)))),
                     "motion": str(item.get("motion", "")),
+                    "transition": str(item.get("transition", "")),
                     "label": str(item.get("label", path.stem)),
                     "duration": item.get("duration"),
                 }
@@ -133,6 +134,7 @@ def shot_items_from_config(config: dict[str, Any], images: list[Path]) -> list[d
             "path": image,
             "shot_type": infer_shot_type(image, index, len(images)),
             "motion": "",
+            "transition": "",
             "label": image.stem,
             "duration": None,
         }
@@ -265,17 +267,84 @@ def render_image_clip(
     return description
 
 
-def sanitize_transition(value: str | None) -> str:
+def sanitize_xfade_transition(value: str | None) -> str:
     allowed = {
         "fade",
+        "fadeblack",
+        "fadewhite",
+        "fadefast",
+        "fadeslow",
         "smoothleft",
         "smoothright",
+        "smoothup",
+        "smoothdown",
         "wipeleft",
         "wiperight",
+        "slideleft",
+        "slideright",
+        "revealleft",
+        "revealright",
+        "coverleft",
+        "coverright",
         "dissolve",
+        "hblur",
     }
     transition = (value or "fade").strip().lower()
     return transition if transition in allowed else "fade"
+
+
+def transition_from_shots(prev_item: dict[str, Any], next_item: dict[str, Any], index: int) -> tuple[str, str]:
+    explicit = str(next_item.get("transition", "")).strip().lower()
+    if explicit:
+        return sanitize_xfade_transition(explicit), f"指定转场：{explicit}"
+
+    prev_type = str(prev_item.get("shot_type", ""))
+    next_type = str(next_item.get("shot_type", ""))
+    if next_type == "entry":
+        return "smoothright", "回到入户：反向横移建立入口"
+    if prev_type == "entry" or next_type == "living_room_opening":
+        return "smoothleft", "入口到大景：顺动横移打开"
+    if next_type == "tv_wall_focus":
+        return "dissolve", "进入主视觉：克制叠化聚焦"
+    if next_type == "dining_slide":
+        return "smoothleft", "餐厨动线：顺线横移衔接"
+    if next_type == "material_detail":
+        return "dissolve", "细节镜头：柔和叠化，保留材质清晰度"
+    if next_type == "final_wide":
+        return "fadeslow", "收尾大景：慢溶解停住"
+    if prev_type == next_type:
+        return "dissolve", "同类空间：柔和叠化"
+    fallback = "smoothright" if index % 2 else "smoothleft"
+    return fallback, "默认空间动线：轻横移衔接"
+
+
+def build_transition_sequence(items: list[dict[str, Any]], config: dict[str, Any], transition_type: str) -> list[dict[str, str]]:
+    if len(items) <= 1:
+        return []
+    raw_sequence = config.get("transition_sequence")
+    if isinstance(raw_sequence, list) and raw_sequence:
+        sequence: list[dict[str, str]] = []
+        for index in range(1, len(items)):
+            raw = raw_sequence[index - 1] if index - 1 < len(raw_sequence) else raw_sequence[-1]
+            if isinstance(raw, dict):
+                value = str(raw.get("type", "fade"))
+                note = str(raw.get("note", "配置转场"))
+            else:
+                value = str(raw)
+                note = "配置转场"
+            sequence.append({"type": sanitize_xfade_transition(value), "note": note})
+        return sequence
+
+    mode = (transition_type or "auto").strip().lower()
+    if mode not in {"auto", "semantic", "director"}:
+        fixed = sanitize_xfade_transition(mode)
+        return [{"type": fixed, "note": "固定柔和转场"} for _ in range(len(items) - 1)]
+
+    return [
+        {"type": transition, "note": note}
+        for index, (prev_item, next_item) in enumerate(zip(items, items[1:]), start=1)
+        for transition, note in [transition_from_shots(prev_item, next_item, index)]
+    ]
 
 
 def apply_transition_padding(items: list[dict[str, Any]], target_duration: float, transition_duration: float) -> tuple[float, float]:
@@ -298,7 +367,7 @@ def concat_clips(
     *,
     durations: list[float],
     transition_duration: float,
-    transition_type: str,
+    transitions: list[dict[str, str]],
 ) -> None:
     if len(clips) <= 1 or transition_duration <= 0:
         concat_file = OUT_DIR / f"{output_name}_static_concat.txt"
@@ -306,7 +375,6 @@ def concat_clips(
         run([ffmpeg_exe(), "-y", "-f", "concat", "-safe", "0", "-i", str(concat_file), "-c", "copy", "-movflags", "+faststart", str(video_only)])
         return
 
-    transition = sanitize_transition(transition_type)
     capped_duration = min(transition_duration, max(0.1, min(durations) - 0.1))
     cmd = [ffmpeg_exe(), "-y"]
     for clip in clips:
@@ -317,6 +385,7 @@ def concat_clips(
     offset = max(0.0, durations[0] - capped_duration)
     for index in range(1, len(clips)):
         out = f"v{index}"
+        transition = transitions[index - 1]["type"] if index - 1 < len(transitions) else "fade"
         filters.append(
             f"[{current}][{index}:v]xfade=transition={transition}:duration={capped_duration:.3f}:offset={offset:.3f}[{out}]"
         )
@@ -417,6 +486,37 @@ def subtitles_enabled(config: dict[str, Any]) -> bool:
     return mode not in {"", "none", "off", "false", "0"}
 
 
+def auto_caption_for_item(item: dict[str, Any], index: int, total: int, style: str) -> str:
+    shot_type = str(item.get("shot_type", ""))
+    label = str(item.get("label", ""))
+    text = label if 4 <= len(label) <= 18 and not label.lower().endswith((".jpg", ".png", ".webp")) else ""
+    if text and not any(marker in text.lower() for marker in ["img", "image", "frame", "shot", "_"]):
+        return text
+
+    style_prefix = "统一色系" if "简约" in style or "全屋" in style else "空间比例"
+    templates = {
+        "entry": "入户开始，收纳就有秩序",
+        "living_room_opening": f"{style_prefix}，才是真的高级",
+        "tv_wall_focus": "主视觉统一，家才耐看",
+        "dining_slide": "餐边柜做好，生活少一半凌乱",
+        "material_detail": "高级感，藏在材质和细节里",
+        "final_wide": "全屋定制，贵在统一和细节",
+    }
+    if index == 0:
+        return templates.get(shot_type, f"{style_prefix}，先抓住第一眼")
+    if index == total - 1:
+        return templates.get(shot_type, "理想家的样子，应该完整而克制")
+    return templates.get(shot_type, "每一处细节，都服务生活")
+
+
+def auto_caption_items(config: dict[str, Any], items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    style = str(config.get("style", "高端全屋定制"))
+    return [
+        {"shot_index": index, "text": auto_caption_for_item(item, index, len(items), style)}
+        for index, item in enumerate(items)
+    ]
+
+
 def caption_entries_from_config(
     config: dict[str, Any],
     items: list[dict[str, Any]],
@@ -424,8 +524,11 @@ def caption_entries_from_config(
     final_duration: float,
 ) -> list[dict[str, Any]]:
     raw = config.get("captions")
-    if not isinstance(raw, list):
-        return []
+    if not isinstance(raw, list) or not raw:
+        if bool(config.get("auto_captions", True)):
+            raw = auto_caption_items(config, items)
+        else:
+            return []
     entries: list[dict[str, Any]] = []
     timeline_start = 0.0
     shot_starts: list[float] = []
@@ -629,6 +732,7 @@ def write_plan(
     config: dict[str, Any],
     transition_duration: float,
     transition_type: str,
+    transitions: list[dict[str, str]],
     caption_count: int,
     subtitle_file: Path | None,
 ) -> None:
@@ -639,6 +743,10 @@ def write_plan(
         )
         for index, item in enumerate(items)
     )
+    transition_rows = "\n".join(
+        f"| {index + 1} -> {index + 2} | {entry['type']} | {entry.get('note', '')} |"
+        for index, entry in enumerate(transitions)
+    ) or "| 无 | 无 | 单镜头无转场 |"
     plan.write_text(
         f"""# L1 样片风格伪漫游成片记录
 
@@ -670,10 +778,16 @@ def write_plan(
 - 总时长：{duration:.2f} 秒
 - 单图时长：{per_image_duration:.2f} 秒
 - 运镜：慢推、轻微横移、中心构图收束，模拟看房氛围但不冒充真实 walkthrough。
-- 转场：{transition_type} 柔和叠化，单次约 {transition_duration:.2f} 秒；避免图片之间生硬硬切。
+- 转场模式：{transition_type}，单次约 {transition_duration:.2f} 秒；按镜头语义做柔和衔接，避免图片之间生硬硬切。
 - 调色：克制通透的高级样板间调色，低饱和暖灰，保留深色柜体重量感和暗部层次。
 - 字幕：{'启用' if caption_count else '未启用'}；少字高级文案，避免遮挡空间价值。
 - 字幕文件：`{rel(subtitle_file) if subtitle_file else '未生成'}`
+
+## 转场设计
+
+| 镜头 | 转场 | 设计意图 |
+|---|---|---|
+{transition_rows}
 
 ## 图片顺序
 
@@ -725,8 +839,9 @@ def main() -> int:
     fps = int(config.get("fps", 60))
     fade_to_black = bool(config.get("fade_to_black", False))
     transition_duration = float(config.get("transition_duration", 0.42) or 0.0)
-    transition_type = sanitize_transition(str(config.get("transition_type", "fade")))
+    transition_type = str(config.get("transition_type", "auto")).strip().lower() or "auto"
     per_image_duration, duration = apply_transition_padding(items, duration, transition_duration)
+    transitions = build_transition_sequence(items, config, transition_type)
 
     first_image_parent = Path(items[0]["path"]).parent
     continuity_report, report_path = run_validator(config_path, images_dir or first_image_parent, output_name)
@@ -758,7 +873,7 @@ def main() -> int:
         video_only,
         durations=[float(item["computed_duration"]) for item in items],
         transition_duration=transition_duration,
-        transition_type=transition_type,
+        transitions=transitions,
     )
     captions = caption_entries_from_config(config, items, transition_duration, duration) if subtitles_enabled(config) else []
     if captions:
@@ -784,6 +899,7 @@ def main() -> int:
         config=config,
         transition_duration=transition_duration,
         transition_type=transition_type,
+        transitions=transitions,
         caption_count=len(captions),
         subtitle_file=subtitle_file,
     )
