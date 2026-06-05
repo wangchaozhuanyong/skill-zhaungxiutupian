@@ -60,7 +60,8 @@
 因此：
 
 - `l4_gate_result: candidate` 只表示 L4 候选，不等于最终 L4。
-- `manual_semantic_review_file` 未配置、文件不存在、源视频 hash 不匹配、逐项勾选不完整或复核结论未通过时，不得最终标注为样片级连续空间漫游；`manual_semantic_review_passed=true` 不能单独作为 L4 依据。
+- `manual_semantic_review_file` 未配置、文件不存在、源视频 hash 不匹配、样片级专项评分低于 85、逐项勾选不完整或复核结论未通过时，不得最终标注为样片级连续空间漫游；`manual_semantic_review_passed=true` 不能单独作为 L4 依据。
+- validator 的抽帧、帧差、硬切风险和最大跳变帧对只提供基础视觉证据，不自动证明电视墙、沙发、餐桌、柜体、地面、灯光和空间比例语义一致；最终 L4 必须人工查看关键帧证据并完成复核文件。
 - 若人工复核发现换房、材质跳变、比例异常、视差不真实或镜头路线断裂，必须降级为 L3、L2 或 L1。
 
 如果只有静态图：

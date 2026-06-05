@@ -116,7 +116,7 @@ capability_level=L3
 - `render_project.py` 必须调用 `render_continuous_video_project.py`。
 - 输出 mp4、preview、plan、continuity report。
 - capability level 至少可为 L3。
-- 只有基础视觉门禁和有效人工空间语义复核文件都通过，才可以最终标为 L4。
+- 只有基础视觉门禁、有效人工空间语义复核文件和样片级专项评分 >=85 都通过，才可以最终标为 L4。
 
 ## 多个 AI clip 但用户坚持说样片级
 
@@ -132,6 +132,23 @@ capability_level=L3
 - 输出“多 clip 拼接”。
 - 即使生成了关键帧证据，也不能自动称为 L4。
 - 必须说明缺少同一空间连续路径和真实连续视差证明。
+
+## L2 目标但 clip 目录未准备好
+
+项目配置：
+
+```text
+source_type=segmented_ai_clips
+source_clips_dir=/path/to/empty_or_missing_dir
+capability_level=L2
+```
+
+期望行为：
+
+- 当前 capability level 必须是 L0。
+- `readiness_status` 必须是 `L2_not_ready`。
+- 报告必须说明至少需要 2 个 AI video clip。
+- 不得把空目录或 1 个 clip 标注为 AI 分段空间漫游。
 
 ## continuity_checks 全 true 但缺视觉证据
 
@@ -187,6 +204,44 @@ manual_semantic_review_file=output/example_semantic_review.md
 - `passes_expected_level` 应为 false。
 - 只有 `manual_semantic_review_file` 存在且有效、专项评分达标，才允许最终 L4。
 
+## L4 复核文件缺少专项评分
+
+项目配置：
+
+```text
+source_type=real_video
+source_video=/path/to/continuous.mp4
+capability_level=L4
+continuity_checks 全部 true
+manual_semantic_review_file=output/example_semantic_review.md
+样片级专项评分未填写
+```
+
+期望行为：
+
+- 不得通过 L4。
+- 报告必须说明样片级专项评分未填写或格式无效。
+- `sample_level_score_passed` 必须是 false。
+
+## L4 专项评分低于门槛
+
+项目配置：
+
+```text
+source_type=real_video
+source_video=/path/to/continuous.mp4
+capability_level=L4
+continuity_checks 全部 true
+manual_semantic_review_file=output/example_semantic_review.md
+样片级专项评分=84
+```
+
+期望行为：
+
+- 不得通过 L4。
+- 报告必须说明样片级专项评分低于 85。
+- 如果专项评分低于 70，报告必须提示必须降级。
+
 ## L4 配置布尔值为 true 但没有复核文件
 
 项目配置：
@@ -216,13 +271,15 @@ manual_semantic_review_file 缺失或文件不存在
 5. Skill 必须能输出 13 秒连续漫游时间码脚本。
 6. Skill 必须区分图片展示型、伪空间漫游型、真正空间漫游型、样片级连续空间漫游型。
 7. Skill 必须输出 L0-L4 capability level。
-8. 多个独立 AI clip 默认 L2，不能默认叫样片级。
+8. 至少 2 个独立 AI clip 才能标 L2，且不能默认叫样片级。
 9. 不要删除 gpt-image-2 高真实关键帧能力，但要防止它错误替代样片级连续漫游目标。
 10. 不要恢复低真实感本地程序化 3D 路线。
 11. 新规则必须写进 references，并在 SKILL.md 中引用。
 12. L4 目标但没有素材时，脚本必须报告缺素材或过度声明失败，不得生成假 L4。
 13. `source_video` 存在且是连续视频来源时，`render_project.py` 必须调用 continuous renderer。
 14. 静态图项目必须调用 L1 static renderer 或返回明确缺口，不得冒充完成。
-15. continuity report 必须包含关键帧拼图、最大跳变帧对、抽帧数量、硬切风险、运动连续性风险、L4 门禁结果和人工语义复核文件状态。
+15. continuity report 必须包含关键帧拼图、最大跳变帧对、抽帧数量、硬切风险、运动连续性风险、L4 门禁结果、素材就绪状态、人工语义复核文件状态和样片级专项评分状态。
 16. `continuity_checks` 全 true 但没有视觉证据或有效人工语义复核文件时，不得通过 L4。
 17. `manual_semantic_review_passed=true` 但没有有效 `manual_semantic_review_file` 时，不得通过 L4。
+18. L4 人工复核文件没有样片级专项评分或评分低于 85 时，不得通过 L4。
+19. L2 目标少于 2 个 clip 时，当前能力必须是 L0，素材就绪状态必须是 L2_not_ready。

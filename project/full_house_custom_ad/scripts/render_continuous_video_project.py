@@ -371,6 +371,8 @@ L4 基础门禁结果：{continuity_report.get('l4_gate_result', 'not_applicable
 空间语义复核文件：`{continuity_report.get('semantic_review_file') or '未配置'}`
 空间语义复核文件是否有效：{'是' if continuity_report.get('semantic_review_file_valid') else '否'}
 源视频 hash 是否匹配：{'是' if continuity_report.get('semantic_review_source_hash') and continuity_report.get('semantic_review_source_hash') == continuity_report.get('semantic_review_expected_source_hash') else '否'}
+样片级专项评分：{continuity_report.get('sample_level_score') if continuity_report.get('sample_level_score') is not None else '未填写'}
+样片级专项评分是否达标：{'是' if continuity_report.get('sample_level_score_passed') else '否'}
 是否发生降级：{'是' if downgraded else '否'}
 如果不能，原因是什么：{'; '.join(continuity_report.get('reasons', [])) or '未发现阻断原因。'}
 
@@ -392,9 +394,9 @@ L4 基础门禁结果：{continuity_report.get('l4_gate_result', 'not_applicable
 
 ## 样片级专项评分
 
-样片级专项评分：脚本不自动给满分；必须结合 `{report_path.name}` 和人工观感复核。
+样片级专项评分：{continuity_report.get('sample_level_score') if continuity_report.get('sample_level_score') is not None else '未填写'} / 100
 L4 是否通过：{'是' if assessed == 'L4' else '否'}
-不通过的原因：{'; '.join(continuity_report.get('reasons', [])) if assessed != 'L4' else '已通过 L4 基础门禁和有效人工空间语义复核文件校验。'}
+不通过的原因：{'; '.join(continuity_report.get('reasons', [])) if assessed != 'L4' else '已通过 L4 基础门禁、有效人工空间语义复核文件和样片级专项评分校验。'}
 降级后的正确命名：{downgrade_name}
 
 ## 输出

@@ -79,7 +79,7 @@ cd project/full_house_custom_ad
 python scripts/create_semantic_review_template.py --config projects/example_continuous_video_template/project.json --reviewer "你的名字"
 ```
 
-L4 最终通过不能只改 `project.json`。必须保留 `output/<project>_semantic_review.md` 人工空间语义复核记录，且 validator 会校验项目 ID、源视频 hash、逐项复核勾选和最终结论。
+L4 最终通过不能只改 `project.json`。必须保留 `output/<project>_semantic_review.md` 人工空间语义复核记录，且 validator 会校验项目 ID、源视频 hash、样片级专项评分、逐项复核勾选和最终结论。样片级专项评分必须不低于 85 分；低于 70 分必须考虑降级。
 
 `render_project.py` 会先生成连续性报告，再按素材类型路由：
 
@@ -116,11 +116,11 @@ project/full_house_custom_ad/music_library/mp3/
 
 - L0：不能做漫游，只能图片展示。
 - L1：样片风格伪漫游，gpt-image-2 静态关键帧 + 本地运镜。
-- L2：AI 分段空间漫游，多个 AI video clip 拼接，但不保证同一空间连续性。
+- L2：AI 分段空间漫游，至少 2 个 AI video clip 拼接，但不保证同一空间连续性。
 - L3：真正空间漫游，真实连续视频、专业 3D 漫游导出，或单条连续 AI video。
-- L4：样片级连续空间漫游，必须满足同一空间连续路径、连续视差、少硬切、材质灯光比例稳定、发布级真实感和人工空间语义复核文件校验。
+- L4：样片级连续空间漫游，必须满足同一空间连续路径、连续视差、少硬切、材质灯光比例稳定、发布级真实感、样片级专项评分 >= 85 和人工空间语义复核文件校验。
 
-缺少连续素材时，可以用 gpt-image-2 做高质量关键帧和 L1 伪漫游，但不能把它叫真正 walkthrough。多个独立 AI clip 默认是 L2；没有连续性报告、关键帧视觉证据和有效人工空间语义复核文件，不得叫 L4 样片级连续空间漫游。
+缺少连续素材时，可以用 gpt-image-2 做高质量关键帧和 L1 伪漫游，但不能把它叫真正 walkthrough。多个独立 AI clip 至少需要 2 个 clip 才能进入 L2；没有连续性报告、关键帧视觉证据、有效人工空间语义复核文件和 >=85 的样片级专项评分，不得叫 L4 样片级连续空间漫游。
 
 ## FAL 分段 AI video
 
@@ -146,4 +146,4 @@ project/full_house_custom_ad/plugins/video_gen/fal.py
 
 ## 备注
 
-真正空间漫游需要真实连续视频、AI 连续视频或专业 3D 漫游素材。样片级连续空间漫游还必须通过连续性检查、专项评分和人工空间语义复核文件校验。缺少连续素材时，skill 可以继续执行高质量降级方案，但必须清楚标注为图片展示、样片风格伪漫游或 AI 分段空间漫游，不能冒充同款样片级 walkthrough。
+真正空间漫游需要真实连续视频、AI 连续视频或专业 3D 漫游素材。样片级连续空间漫游还必须通过连续性检查、样片级专项评分和人工空间语义复核文件校验。validator 的抽帧和帧差只提供基础视觉证据，不能自动证明电视墙、沙发、材质、灯光和空间比例语义一致。缺少连续素材时，skill 可以继续执行高质量降级方案，但必须清楚标注为图片展示、样片风格伪漫游或 AI 分段空间漫游，不能冒充同款样片级 walkthrough。

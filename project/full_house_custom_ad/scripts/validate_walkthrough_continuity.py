@@ -22,6 +22,8 @@ VIDEO_EXTS = {".mp4", ".mov", ".m4v", ".webm"}
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp"}
 L_ORDER = {"L0": 0, "L1": 1, "L2": 2, "L3": 3, "L4": 4}
 VISUAL_SAMPLE_COUNT = 32
+SAMPLE_LEVEL_PASS_SCORE = 85.0
+SAMPLE_LEVEL_SEVERE_SCORE = 70.0
 SEMANTIC_POSITIVE_CHECKS = [
     "电视墙是否一致",
     "沙发是否一致",
@@ -143,6 +145,20 @@ def review_check_value(text: str, label: str) -> str:
     return ""
 
 
+def sample_level_score_value(text: str) -> float | None:
+    raw = line_value(text, "样片级专项评分")
+    if not raw:
+        return None
+    score_part = raw.split("/", 1)[0].strip()
+    match = re.fullmatch(r"(\d+(?:\.\d+)?)", score_part)
+    if not match:
+        return None
+    value = float(match.group(1))
+    if value < 0 or value > 100:
+        return None
+    return value
+
+
 def semantic_review_status(config: dict[str, Any], project_id: str, output_name: str, source_video: Path | None) -> dict[str, Any]:
     path = review_path_from_config(config, output_name)
     result: dict[str, Any] = {
@@ -156,6 +172,9 @@ def semantic_review_status(config: dict[str, Any], project_id: str, output_name:
         "semantic_review_conclusion": "",
         "semantic_review_source_hash": "",
         "semantic_review_expected_source_hash": file_hash(source_video),
+        "sample_level_score": None,
+        "sample_level_score_passed": False,
+        "sample_level_score_severe": False,
     }
     errors: list[str] = result["semantic_review_errors"]
     if not path:
@@ -166,6 +185,17 @@ def semantic_review_status(config: dict[str, Any], project_id: str, output_name:
         return result
 
     text = path.read_text(encoding="utf-8", errors="replace")
+    score = sample_level_score_value(text)
+    result["sample_level_score"] = score
+    result["sample_level_score_passed"] = bool(score is not None and score >= SAMPLE_LEVEL_PASS_SCORE)
+    result["sample_level_score_severe"] = bool(score is not None and score < SAMPLE_LEVEL_SEVERE_SCORE)
+    if score is None:
+        errors.append("样片级专项评分未填写或格式无效。")
+    elif score < SAMPLE_LEVEL_PASS_SCORE:
+        errors.append(f"样片级专项评分 {score:g} 低于 {SAMPLE_LEVEL_PASS_SCORE:g}，不得通过 L4。")
+    if score is not None and score < SAMPLE_LEVEL_SEVERE_SCORE:
+        errors.append(f"样片级专项评分 {score:g} 低于 {SAMPLE_LEVEL_SEVERE_SCORE:g}，必须考虑降级。")
+
     file_project_id = line_value(text, "项目 ID")
     if file_project_id != project_id:
         errors.append(f"复核文件项目 ID 不匹配：{file_project_id or '未填写'} != {project_id}")
@@ -529,10 +559,15 @@ def assess(args: argparse.Namespace, config: dict[str, Any]) -> dict[str, Any]:
     video_files = collect_files(video, VIDEO_EXTS)
     semantic_review = semantic_review_status(config, project_id, output_name, video)
     semantic_review_passed = bool(semantic_review["semantic_review_file_valid"])
+    sample_score_passed = bool(semantic_review["sample_level_score_passed"])
 
+    requested_multi_clip = source_type in {"segmented_ai_clips", "multi_ai_clips"}
     is_static = bool(image_files) or source_type in {"static_images", "static_images_no_depth"}
-    is_multi_clip = len(clip_files) > 1 or source_type in {"segmented_ai_clips", "multi_ai_clips"}
+    is_multi_clip = len(clip_files) >= 2
     is_single_video = len(video_files) == 1 and not is_multi_clip
+    readiness_status = "ready"
+    if requested_multi_clip and len(clip_files) < 2:
+        readiness_status = "L2_not_ready"
     clip_labels = [
         str(item.get("label", item.get("filename", "")))
         for item in config.get("clips", config.get("clip_specs", []))
@@ -561,6 +596,11 @@ def assess(args: argparse.Namespace, config: dict[str, Any]) -> dict[str, Any]:
     elif source_type == "static_images" and not image_files and not is_multi_clip and not is_single_video:
         level = "L0"
         reasons.append("声明为静态图项目，但没有找到可审查的图片素材。")
+    elif requested_multi_clip and len(clip_files) < 2:
+        level = "L0"
+        reasons.append(
+            f"声明为 L2 分段 AI 漫游，但只找到 {len(clip_files)} 个 clip；至少需要 2 个 AI video clip。"
+        )
     elif is_static and not is_multi_clip and not is_single_video:
         level = "L1"
         reasons.append("素材是静态图片或静态关键帧运镜，最高只能标注为样片风格伪漫游。")
@@ -575,12 +615,12 @@ def assess(args: argparse.Namespace, config: dict[str, Any]) -> dict[str, Any]:
         )
         l4_base_gate_ok = all_l4_checks_passed(config) and l4_visual_ok
         if source_type in {"real_video", "3d_walkthrough", "continuous_ai_video"} or config.get("single_continuous_video"):
-            if l4_base_gate_ok and semantic_review_passed:
+            if l4_base_gate_ok and semantic_review_passed and sample_score_passed:
                 level = "L4"
-                reasons.append("素材是单条连续视频，基础视觉门禁和人工空间语义复核文件均支持 L4。")
+                reasons.append("素材是单条连续视频，基础视觉门禁、人工空间语义复核文件和样片级专项评分均支持 L4。")
             elif l4_base_gate_ok:
                 level = "L3"
-                reasons.append("素材是单条连续视频，已达到 L4 基础视觉门禁候选；最终 L4 仍需有效的人工空间语义复核文件。")
+                reasons.append("素材是单条连续视频，已达到 L4 基础视觉门禁候选；最终 L4 仍需有效的人工空间语义复核文件和 >=85 的样片级专项评分。")
             else:
                 level = "L3"
                 reasons.append("素材是单条连续视频，可能达到真正空间漫游；L4 还需要全部连续性检查、低硬切风险和人工空间语义复核。")
@@ -590,7 +630,9 @@ def assess(args: argparse.Namespace, config: dict[str, Any]) -> dict[str, Any]:
     else:
         reasons.append("未找到可用静态图、clip 或连续视频素材。")
 
-    if source_type in {"segmented_ai_clips", "multi_ai_clips"}:
+    if requested_multi_clip and len(clip_files) < 2:
+        reasons.append("L2 目标素材未就绪；不能把空目录或单个 clip 标注为 AI 分段空间漫游。")
+    elif requested_multi_clip:
         reasons.append("多个独立 AI clip 即使有动态，也不能默认称为真正 walkthrough 或样片级连续空间漫游。")
     if is_static:
         reasons.append("静态图运镜不能升级为真正 walkthrough。")
@@ -601,6 +643,10 @@ def assess(args: argparse.Namespace, config: dict[str, Any]) -> dict[str, Any]:
     if expected_level(config) == "L4" and not semantic_review_passed:
         reasons.append("目标为 L4，但人工空间语义复核文件未通过；最终样片级命名需要有效复核记录。")
         reasons.extend(str(item) for item in semantic_review["semantic_review_errors"])
+    if expected_level(config) == "L4" and not sample_score_passed:
+        reasons.append("目标为 L4，但样片级专项评分未达到 85 分硬门槛。")
+    if expected_level(config) == "L4" and bool(semantic_review["sample_level_score_severe"]):
+        reasons.append("样片级专项评分低于 70 分，必须降级处理。")
     if expected_level(config) == "L4" and bool(config.get("manual_semantic_review_passed")) and not semantic_review_passed:
         reasons.append("project.json 中的 manual_semantic_review_passed=true 不能单独作为 L4 通过依据。")
 
@@ -614,6 +660,7 @@ def assess(args: argparse.Namespace, config: dict[str, Any]) -> dict[str, Any]:
             and visual["visual_evidence_available"]
             and visual["hard_cut_risk"] != "high"
             and semantic_review_passed
+            and sample_score_passed
         )
     if exp and not passes_expected:
         reasons.append(f"目标要求 {exp}，当前只能达到 {level}。")
@@ -630,6 +677,7 @@ def assess(args: argparse.Namespace, config: dict[str, Any]) -> dict[str, Any]:
         or (exp == "L4" and level != "L4")
         or visual["hard_cut_risk"] in {"medium", "high"}
         or (exp == "L4" and not semantic_review_passed)
+        or (exp == "L4" and not sample_score_passed)
     )
     if exp == "L4":
         l4_base_candidate = bool(
@@ -653,6 +701,7 @@ def assess(args: argparse.Namespace, config: dict[str, Any]) -> dict[str, Any]:
         "is_single_continuous_video": is_single_video,
         "is_multi_clip": is_multi_clip,
         "is_static_image_motion": is_static,
+        "readiness_status": readiness_status,
         "clip_count": len(clip_files),
         "image_count": len(image_files),
         "video_count": len(video_files),
@@ -690,6 +739,8 @@ def report_markdown(result: dict[str, Any]) -> str:
     semantic_checks = "\n".join(
         f"| {key} | {value or '未勾选'} |" for key, value in result["semantic_review_checks"].items()
     ) or "| 未提供 | 未勾选 |"
+    sample_score = result["sample_level_score"]
+    sample_score_text = "未填写" if sample_score is None else f"{float(sample_score):g} / 100"
     return f"""# Walkthrough Continuity Report
 
 项目：{result['project_id']}
@@ -702,6 +753,7 @@ def report_markdown(result: dict[str, Any]) -> str:
 - 是否单条连续视频：{yes(result['is_single_continuous_video'])}
 - 是否多 clip 拼接：{yes(result['is_multi_clip'])}
 - 是否静态图运镜：{yes(result['is_static_image_motion'])}
+- 素材就绪状态：{result['readiness_status']}
 - 是否允许称为真正 walkthrough：{yes(result['assessed_capability_level'] in {'L3', 'L4'})}
 - 是否允许称为样片级连续空间漫游：{yes(result['assessed_capability_level'] == 'L4')}
 - 是否需要人工复核：{yes(result['manual_review_required'])}
@@ -737,6 +789,9 @@ def report_markdown(result: dict[str, Any]) -> str:
 - 复核日期：{result['semantic_review_date'] or '未填写'}
 - 复核结论：{result['semantic_review_conclusion'] or '未填写'}
 - 源视频 hash 匹配：{yes(bool(result['semantic_review_source_hash']) and result['semantic_review_source_hash'] == result['semantic_review_expected_source_hash'])}
+- 样片级专项评分：{sample_score_text}
+- 样片级专项评分达标：{yes(result['sample_level_score_passed'])}
+- 样片级专项评分严重不足：{yes(result['sample_level_score_severe'])}
 
 | 复核项 | 选择 |
 |---|---|
@@ -773,7 +828,7 @@ def report_markdown(result: dict[str, Any]) -> str:
 - 静态图生成视频不得通过真正 walkthrough 检查。
 - 多个独立 AI clip 拼接不得自动通过样片级检查。
 - 真实连续视频、专业 3D 漫游导出或单条连续 AI video，才可能达到 L3。
-- 同一空间、连续视差、少硬切、材质灯光比例稳定、基础视觉门禁和人工空间语义复核均通过，才可能达到 L4。
+- 同一空间、连续视差、少硬切、材质灯光比例稳定、基础视觉门禁、有效人工空间语义复核文件和样片级专项评分 >= 85 均通过，才可能达到 L4。
 """
 
 

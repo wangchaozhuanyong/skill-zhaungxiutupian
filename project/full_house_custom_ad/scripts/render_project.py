@@ -15,6 +15,7 @@ SEGMENTED_ASSEMBLER = ROOT / "scripts" / "assemble_segmented_ai_walkthrough_clip
 CONTINUOUS_RENDERER = ROOT / "scripts" / "render_continuous_video_project.py"
 STATIC_RENDERER = ROOT / "scripts" / "render_static_image_project.py"
 CONTINUOUS_SOURCE_TYPES = {"real_video", "3d_walkthrough", "continuous_ai_video"}
+VIDEO_EXTS = {".mp4", ".mov", ".m4v", ".webm"}
 
 
 def load_config(path: Path) -> dict[str, Any]:
@@ -26,6 +27,14 @@ def resolve_path(value: str | None) -> Path | None:
         return None
     path = Path(value)
     return path if path.is_absolute() else ROOT / path
+
+
+def collect_video_files(path: Path | None) -> list[Path]:
+    if not path or not path.exists():
+        return []
+    if path.is_file():
+        return [path] if path.suffix.lower() in VIDEO_EXTS else []
+    return sorted(p for p in path.rglob("*") if p.is_file() and p.suffix.lower() in VIDEO_EXTS)
 
 
 def run(cmd: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -40,10 +49,8 @@ def run(cmd: list[str], *, check: bool = True) -> subprocess.CompletedProcess[st
 
 
 def has_segmented_clips(config: dict[str, Any]) -> bool:
-    source_type = str(config.get("source_type", ""))
-    return source_type in {"segmented_ai_clips", "multi_ai_clips"} or bool(
-        config.get("source_clips_dir") or config.get("clip_dir") or config.get("ai_clips_dir")
-    )
+    clips_dir = resolve_path(config.get("source_clips_dir") or config.get("clip_dir") or config.get("ai_clips_dir"))
+    return len(collect_video_files(clips_dir)) >= 2
 
 
 def has_static_images(config: dict[str, Any]) -> bool:

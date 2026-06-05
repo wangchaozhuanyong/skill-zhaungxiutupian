@@ -65,6 +65,7 @@ L4 是否通过：
 - 是否单条连续视频
 - 是否多 clip 拼接
 - 是否静态图运镜
+- 素材就绪状态，尤其是 L2_not_ready
 - 是否生成 continuity_report.md 和关键帧证据图
 - 是否生成最大跳变帧对证据图
 - 是否通过连续性检查
@@ -171,7 +172,7 @@ L4 是否通过：
 如果本次目标是样片级连续空间漫游，必须达到 L4。真实连续视频、专业 3D 漫游导出或单条连续 AI video 才可能达到 L3/L4；若只有静态图，只能执行 L1“样片风格伪漫游”；若是多个独立 AI clip 拼接，默认只能执行 L2“AI 分段空间漫游”。L1/L2 不得称为真正 walkthrough 或同款样片级漫游。
 
 连续性报告：
-必须输出或引用 continuity_report.md，说明是否单条连续视频、是否多 clip 拼接、是否静态图运镜、是否通过连续性检查、是否允许称为真正 walkthrough、是否允许称为样片级连续空间漫游。样片级目标必须同时输出 keyframe_sheet、max_delta_pair_sheet、sampled_frame_count、scene_change_count、avg_frame_delta、max_frame_delta、max_delta_from_frame、max_delta_to_frame、hard_cut_risk、motion_continuity_risk、visual_evidence_available、manual_review_required、semantic_review_required、semantic_review_file、semantic_review_file_exists、semantic_review_file_valid、semantic_review_reviewer、semantic_review_date、semantic_review_conclusion、semantic_review_source_hash、semantic_review_expected_source_hash、semantic_review_errors 和 l4_gate_result。`manual_semantic_review_passed=true` 只能作为兼容字段，不得单独通过 L4。
+必须输出或引用 continuity_report.md，说明是否单条连续视频、是否多 clip 拼接、是否静态图运镜、素材就绪状态、是否通过连续性检查、是否允许称为真正 walkthrough、是否允许称为样片级连续空间漫游。样片级目标必须同时输出 keyframe_sheet、max_delta_pair_sheet、sampled_frame_count、scene_change_count、avg_frame_delta、max_frame_delta、max_delta_from_frame、max_delta_to_frame、hard_cut_risk、motion_continuity_risk、visual_evidence_available、manual_review_required、semantic_review_required、semantic_review_file、semantic_review_file_exists、semantic_review_file_valid、semantic_review_reviewer、semantic_review_date、semantic_review_conclusion、semantic_review_source_hash、semantic_review_expected_source_hash、sample_level_score、sample_level_score_passed、sample_level_score_severe、semantic_review_errors 和 l4_gate_result。`manual_semantic_review_passed=true` 只能作为兼容字段，不得单独通过 L4。
 
 镜头处理：
 空间大景停留【秒数】，普通空间停留【秒数】，细节图停留【秒数】。
@@ -193,7 +194,7 @@ L4 是否通过：
 如需裁音乐或循环，必须写明原因；否则按音乐完整结构执行。
 
 质量门槛：
-前 5 秒评分不得低于 8 分，总体发布评分不得低于 85 分。样片级连续空间漫游专项评分不得低于 85 分；低于 85 分不能标注 L4，低于 70 分必须降级为 L1/L2。脚本基础门禁为 candidate 时也不能自动当作最终 L4，必须有效人工空间语义复核文件通过。低于门槛时先修改方案，不进入制作。
+前 5 秒评分不得低于 8 分，总体发布评分不得低于 85 分。样片级连续空间漫游专项评分不得低于 85 分；低于 85 分不能标注 L4，低于 70 分必须降级为 L1/L2。脚本基础门禁为 candidate 时也不能自动当作最终 L4，必须有效人工空间语义复核文件通过，并且样片级专项评分 >=85。低于门槛时先修改方案，不进入制作。
 ```
 
 ## QA 清单
@@ -221,6 +222,7 @@ L4 是否通过：
 - 样片级目标是否输出专项评分、L4 是否通过、不通过原因和降级后的正确命名。
 - continuity_report.md 是否包含关键帧拼图、最大跳变帧对、抽帧数量、场景跳变数量、平均/最大帧差、硬切风险、运动连续性风险、L4 门禁结果和人工语义复核文件状态。
 - L4 目标是否具备有效 `manual_semantic_review_file`，并校验项目 ID、源视频 hash、逐项勾选、复核人、复核日期和复核结论。
+- L4 目标是否在人工复核文件中填写样片级专项评分，且分数不低于 85。
 - 样片级连续空间漫游是否符合连续摄影机路径、真实视差、材质灯光一致、少硬切和客户发布真实感标准。
 - 是否避免把图片轮播、Ken Burns 推拉、gpt-image-2 多图切换称为同款样片级 walkthrough。
 - 参考视频是否只学习审美，没有复刻路线。
