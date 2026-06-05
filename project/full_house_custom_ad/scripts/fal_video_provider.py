@@ -15,8 +15,6 @@ DEPS = ROOT / ".deps"
 if DEPS.exists():
     sys.path.insert(0, str(DEPS))
 
-import requests
-
 
 QUEUE_BASE = "https://queue.fal.run"
 MODEL_ALIASES = {
@@ -137,6 +135,11 @@ class FALQueueVideoProvider:
         }
         if seed is not None:
             arguments["seed"] = int(seed)
+
+        try:
+            import requests
+        except Exception as exc:
+            raise FALVideoGenerationError(f"requests is not importable in this Python environment: {exc}") from exc
 
         submit = requests.post(
             f"{QUEUE_BASE}/{endpoint}",

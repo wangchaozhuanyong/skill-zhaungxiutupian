@@ -16,8 +16,6 @@ if DEPS.exists():
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(REPO))
 
-import requests
-
 
 from scripts.fal_video_provider import FALQueueVideoProvider, FALVideoGenerationError, load_default_env
 
@@ -75,6 +73,8 @@ def style_bible_text(bible: dict[str, Any]) -> str:
 
 
 def download_video(url: str, path: Path) -> None:
+    import requests
+
     with requests.get(url, stream=True, timeout=240) as response:
         response.raise_for_status()
         with path.open("wb") as f:
