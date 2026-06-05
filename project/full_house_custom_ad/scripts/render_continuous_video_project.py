@@ -234,7 +234,7 @@ def make_preview(final: Path, preview: Path, duration: float, output_name: str) 
     for i in range(count):
         timestamp = start + (end - start) * i / max(1, count - 1)
         out = frame_dir / f"frame_{i:02d}.jpg"
-        run([ffmpeg_exe(), "-y", "-ss", f"{timestamp:.2f}", "-i", str(final), "-frames:v", "1", "-q:v", "2", str(out)], check=False)
+        run([ffmpeg_exe(), "-y", "-ss", f"{timestamp:.2f}", "-i", str(final), "-frames:v", "1", "-update", "1", "-q:v", "2", str(out)], check=False)
         if not out.exists():
             continue
         with Image.open(out) as img:
@@ -365,6 +365,9 @@ def write_plan(
 是否通过连续性检查：{'是' if continuity_report.get('passes_expected_level') else '否'}
 是否允许称为真正 walkthrough：{'是' if L_ORDER_VALUE(assessed) >= 3 else '否'}
 是否允许称为样片级连续空间漫游：{'是' if assessed == 'L4' else '否'}
+L4 基础门禁结果：{continuity_report.get('l4_gate_result', 'not_applicable')}
+是否需要空间语义人工复核：{'是' if continuity_report.get('semantic_review_required') else '否'}
+空间语义人工复核是否通过：{'是' if continuity_report.get('manual_semantic_review_passed') else '否'}
 是否发生降级：{'是' if downgraded else '否'}
 如果不能，原因是什么：{'; '.join(continuity_report.get('reasons', [])) or '未发现阻断原因。'}
 
@@ -388,7 +391,7 @@ def write_plan(
 
 样片级专项评分：脚本不自动给满分；必须结合 `{report_path.name}` 和人工观感复核。
 L4 是否通过：{'是' if assessed == 'L4' else '否'}
-不通过的原因：{'; '.join(continuity_report.get('reasons', [])) if assessed != 'L4' else '已通过 L4 配置和视觉证据检查。'}
+不通过的原因：{'; '.join(continuity_report.get('reasons', [])) if assessed != 'L4' else '已通过 L4 基础门禁和人工空间语义复核。'}
 降级后的正确命名：{downgrade_name}
 
 ## 输出

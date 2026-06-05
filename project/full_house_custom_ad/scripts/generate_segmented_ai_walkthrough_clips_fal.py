@@ -15,6 +15,7 @@ REPO = ROOT.parent
 DEPS = ROOT / ".deps"
 if DEPS.exists():
     sys.path.insert(0, str(DEPS))
+sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(REPO))
 
 import requests
@@ -22,6 +23,7 @@ import requests
 
 DEFAULT_CLIP_DIR = ROOT / "ai_clips" / "segmented_ai_walkthrough_19s"
 ASSEMBLER = ROOT / "scripts" / "assemble_segmented_ai_walkthrough_clips.py"
+PROVIDER_PATH = ROOT / "plugins" / "video_gen" / "fal.py"
 NEGATIVE_PROMPT = (
     "cartoon, animation, CGI look, low quality, blurry, distorted room, "
     "distorted wide angle, warped cabinet lines, messy clutter, harsh lighting, "
@@ -233,7 +235,7 @@ def main() -> int:
         print("Add it to one of these files:")
         print(f"- {ROOT / '.env'}")
         print(f"- {REPO / '.env'}")
-        print("- /Users/wangchao/.hermes/.env")
+        print(f"- {Path.home() / '.hermes' / '.env'}")
         print("Format: FAL_KEY=your_real_fal_key")
         return 2
 
@@ -243,7 +245,7 @@ def main() -> int:
     except Exception as exc:
         print("Cannot import FALVideoGenProvider.")
         print("This repository does not include the video generation provider implementation.")
-        print("Install or add the provider at plugins/video_gen/fal.py, then run this script again.")
+        print(f"Install or add the provider at {PROVIDER_PATH}, then run this script again.")
         print(f"Original import error: {exc}")
         return 3
 

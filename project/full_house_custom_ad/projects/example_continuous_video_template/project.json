@@ -1,0 +1,27 @@
+{
+  "project_id": "example_continuous_video_template",
+  "example_purpose": "连续视频后期模板；把 source_video 改成真实连续视频、专业 3D 漫游导出或单条连续 AI video 后再运行。",
+  "target_video_type": "true_walkthrough",
+  "capability_level": "L3",
+  "platform": "douyin",
+  "resolution": "1080x1920",
+  "fps": 60,
+  "source_type": "real_video",
+  "source_video": "/ABSOLUTE/PATH/TO/YOUR_CONTINUOUS_VIDEO.mp4",
+  "music": "",
+  "use_source_audio": false,
+  "duration": 0,
+  "subtitle_mode": "minimal",
+  "color_grade": "low_saturation_warm_grey_preserve_dark_cabinet_weight",
+  "style": "高端全屋定制",
+  "allow_downgrade": true,
+  "manual_semantic_review_passed": false,
+  "output_name": "example_continuous_video_template",
+  "continuity_checks": {
+    "same_space_path": false,
+    "minimal_hard_cuts": false,
+    "continuous_parallax": false,
+    "material_light_consistency": false,
+    "publish_ready_realism": false
+  }
+}

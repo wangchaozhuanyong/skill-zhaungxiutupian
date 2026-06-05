@@ -209,7 +209,7 @@ def make_preview(final: Path, preview: Path, duration: float, output_name: str) 
     frames: list[Image.Image] = []
     for i, t in enumerate(times):
         out = frame_dir / f"frame_{i:02d}.jpg"
-        run([ffmpeg_exe(), "-y", "-ss", f"{t:.2f}", "-i", str(final), "-frames:v", "1", "-q:v", "2", str(out)])
+        run([ffmpeg_exe(), "-y", "-ss", f"{t:.2f}", "-i", str(final), "-frames:v", "1", "-update", "1", "-q:v", "2", str(out)])
         img = Image.open(out).convert("RGB")
         img.thumbnail((216, 384), Image.Resampling.LANCZOS)
         frames.append(img.copy())

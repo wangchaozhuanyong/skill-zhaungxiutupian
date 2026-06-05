@@ -1,6 +1,6 @@
 {
-  "project_id": "italian_light_luxury_145sqm",
-  "example_purpose": "历史示例：L4 目标模板，不是可直接渲染项目；必须先填写 source_video，并完成基础视觉门禁和人工空间语义复核。",
+  "project_id": "example_l4_target_missing_assets",
+  "example_purpose": "这是 L4 样片级连续空间漫游目标模板，不是可直接渲染项目；必须先填写 source_video，且需要基础视觉门禁和人工空间语义复核。",
   "target_video_type": "sample_level_walkthrough",
   "capability_level": "L4",
   "platform": "douyin",
@@ -17,7 +17,7 @@
   "style": "意式轻奢",
   "allow_downgrade": false,
   "manual_semantic_review_passed": false,
-  "output_name": "italian_light_luxury_145sqm_walkthrough",
+  "output_name": "example_l4_target_missing_assets",
   "continuity_checks": {
     "same_space_path": false,
     "minimal_hard_cuts": false,
@@ -43,7 +43,6 @@
       "同一地面反光",
       "同一柜体颜色",
       "同一灯带色温"
-    ],
-    "negative_prompt": "different room, different house, inconsistent TV wall, inconsistent sofa, inconsistent dining table, changing floor material, changing cabinet color, harsh light, over saturated, cartoon, text, watermark"
+    ]
   }
 }

@@ -83,6 +83,109 @@
 - 指出是否缺少一镜到底路径。
 - 给出真漫游补素材方案和伪漫游补救方案。
 
+## L4 目标但没有素材
+
+项目配置：
+
+```text
+capability_level=L4
+source_video=""
+allow_downgrade=false
+```
+
+期望行为：
+
+- `render_project.py` 必须先生成 continuity report。
+- 返回缺素材或目标无法满足，不得生成假视频。
+- 不得自动转 gpt-image-2 伪漫游并称为同款样片级。
+- 报告必须说明没有关键帧视觉证据，当前不能通过 L4。
+
+## 单条真实连续视频
+
+项目配置：
+
+```text
+source_type=real_video
+source_video=/path/to/continuous.mp4
+capability_level=L3
+```
+
+期望行为：
+
+- `render_project.py` 必须调用 `render_continuous_video_project.py`。
+- 输出 mp4、preview、plan、continuity report。
+- capability level 至少可为 L3。
+- 只有基础视觉门禁和人工空间语义复核都通过，才可以最终标为 L4。
+
+## 多个 AI clip 但用户坚持说样片级
+
+用户：
+
+```text
+这 5 段 AI 视频帮我拼成样片级一镜到底。
+```
+
+期望行为：
+
+- 默认 L2：AI 分段空间漫游。
+- 输出“多 clip 拼接”。
+- 即使生成了关键帧证据，也不能自动称为 L4。
+- 必须说明缺少同一空间连续路径和真实连续视差证明。
+
+## continuity_checks 全 true 但缺视觉证据
+
+项目配置：
+
+```text
+capability_level=L4
+continuity_checks 全部 true
+source_video=""
+manual_semantic_review_passed=false
+```
+
+期望行为：
+
+- 不得通过 L4。
+- `--fail-on-overclaim` 必须失败。
+- 报告必须说明缺少关键帧视觉证据和人工空间语义复核。
+- 不能只因为 project.json 声明 true 就称为样片级。
+
+## 静态图项目
+
+项目配置：
+
+```text
+source_type=static_images
+source_images_dir=/path/to/images
+capability_level=L1
+```
+
+期望行为：
+
+- `render_project.py` 必须调用 `render_static_image_project.py`。
+- 输出 L1 样片风格伪漫游视频、preview、plan、continuity report。
+- plan 必须写明不是真正 walkthrough，不是 L4。
+- 静态图不得升级为 L3/L4。
+
+## L4 基础门禁候选
+
+项目配置：
+
+```text
+source_type=real_video
+source_video=/path/to/continuous.mp4
+capability_level=L4
+continuity_checks 全部 true
+manual_semantic_review_passed=false
+```
+
+期望行为：
+
+- 如果关键帧证据和硬切风险通过，`l4_gate_result` 可为 candidate。
+- candidate 不等于 L4 通过。
+- `passes_expected_level` 应为 false。
+- 只有 `manual_semantic_review_passed=true` 且专项评分达标，才允许最终 L4。
+
 ## 验收标准
 
 1. 用户发样片并说“做这种”，Skill 先分析样片类型，而不是直接套图片展示模板。
@@ -96,3 +199,8 @@
 9. 不要删除 gpt-image-2 高真实关键帧能力，但要防止它错误替代样片级连续漫游目标。
 10. 不要恢复低真实感本地程序化 3D 路线。
 11. 新规则必须写进 references，并在 SKILL.md 中引用。
+12. L4 目标但没有素材时，脚本必须报告缺素材或过度声明失败，不得生成假 L4。
+13. `source_video` 存在且是连续视频来源时，`render_project.py` 必须调用 continuous renderer。
+14. 静态图项目必须调用 L1 static renderer 或返回明确缺口，不得冒充完成。
+15. continuity report 必须包含关键帧拼图、最大跳变帧对、抽帧数量、硬切风险、运动连续性风险、L4 门禁结果和人工语义复核标记。
+16. `continuity_checks` 全 true 但没有视觉证据或人工语义复核时，不得通过 L4。

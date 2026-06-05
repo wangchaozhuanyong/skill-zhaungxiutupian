@@ -40,14 +40,32 @@ python3 -m pip install -r requirements.txt -t project/full_house_custom_ad/.deps
 
 ```bash
 cd project/full_house_custom_ad
-python scripts/render_project.py --config projects/example_walkthrough/project.json
+python scripts/render_project.py --config projects/example_l4_target_missing_assets/project.json --validate-only --allow-downgrade
+```
+
+上面这个命令只用于检查 L4 目标模板，不会直接生成视频；报告会说明当前缺素材，不能通过 L4。样片级连续空间漫游必须先填写真实连续视频、专业 3D 漫游导出或单条连续 AI video。
+
+连续视频后期模板：
+
+```bash
+cd project/full_house_custom_ad
+# 先把 projects/example_continuous_video_template/project.json 里的 source_video 改成真实视频路径
+python scripts/render_project.py --config projects/example_continuous_video_template/project.json
+```
+
+静态图 L1 伪漫游模板：
+
+```bash
+cd project/full_house_custom_ad
+# 先把 projects/example_static_image_l1_template/project.json 里的 source_images_dir 改成图片目录
+python scripts/render_project.py --config projects/example_static_image_l1_template/project.json
 ```
 
 `render_project.py` 会先生成连续性报告，再按素材类型路由：
 
 - 单条真实连续视频、专业 3D 漫游导出或单条 AI 连续视频：走 `render_continuous_video_project.py`
 - 多个独立 AI video clip：走 `assemble_segmented_ai_walkthrough_clips.py`
-- 静态图关键帧：只允许走 L1 伪漫游/图片展示渲染器，不得冒充真正 walkthrough
+- 静态图关键帧：走 `render_static_image_project.py`，只允许标注 L1 伪漫游/图片展示，不得冒充真正 walkthrough
 - 没有素材：只输出报告并停止
 
 仓库不提交以下内容：
@@ -80,9 +98,9 @@ project/full_house_custom_ad/music_library/mp3/
 - L1：样片风格伪漫游，gpt-image-2 静态关键帧 + 本地运镜。
 - L2：AI 分段空间漫游，多个 AI video clip 拼接，但不保证同一空间连续性。
 - L3：真正空间漫游，真实连续视频、专业 3D 漫游导出，或单条连续 AI video。
-- L4：样片级连续空间漫游，必须满足同一空间连续路径、连续视差、少硬切、材质灯光比例稳定和发布级真实感。
+- L4：样片级连续空间漫游，必须满足同一空间连续路径、连续视差、少硬切、材质灯光比例稳定、发布级真实感和人工空间语义复核。
 
-缺少连续素材时，可以用 gpt-image-2 做高质量关键帧和 L1 伪漫游，但不能把它叫真正 walkthrough。多个独立 AI clip 默认是 L2；没有连续性报告、关键帧视觉证据和人工复核，不得叫 L4 样片级连续空间漫游。
+缺少连续素材时，可以用 gpt-image-2 做高质量关键帧和 L1 伪漫游，但不能把它叫真正 walkthrough。多个独立 AI clip 默认是 L2；没有连续性报告、关键帧视觉证据和人工空间语义复核，不得叫 L4 样片级连续空间漫游。
 
 ## FAL 分段 AI video
 
@@ -100,8 +118,12 @@ project/.env
 FAL_KEY=your_real_fal_key
 ```
 
-本仓库的分段 AI clip 只标注为 L2：AI 分段空间漫游。它可以有动态镜头，但不能默认说成样片级连续 walkthrough。
+本仓库的分段 AI clip 只标注为 L2：AI 分段空间漫游。它可以有动态镜头，但不能默认说成样片级连续 walkthrough。FAL provider 需要自行添加到：
+
+```text
+project/full_house_custom_ad/plugins/video_gen/fal.py
+```
 
 ## 备注
 
-真正空间漫游需要真实连续视频、AI 连续视频或专业 3D 漫游素材。样片级连续空间漫游还必须通过连续性检查和专项评分。缺少连续素材时，skill 可以继续执行高质量降级方案，但必须清楚标注为图片展示、样片风格伪漫游或 AI 分段空间漫游，不能冒充同款样片级 walkthrough。
+真正空间漫游需要真实连续视频、AI 连续视频或专业 3D 漫游素材。样片级连续空间漫游还必须通过连续性检查、专项评分和人工空间语义复核。缺少连续素材时，skill 可以继续执行高质量降级方案，但必须清楚标注为图片展示、样片风格伪漫游或 AI 分段空间漫游，不能冒充同款样片级 walkthrough。

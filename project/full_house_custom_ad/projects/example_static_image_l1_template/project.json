@@ -1,0 +1,20 @@
+{
+  "project_id": "example_static_image_l1_template",
+  "example_purpose": "L1 静态图伪漫游模板；把 source_images_dir 改成图片目录后，可生成样片风格伪漫游成片，但不得称为真正 walkthrough。",
+  "target_video_type": "pseudo_walkthrough",
+  "capability_level": "L1",
+  "platform": "douyin",
+  "resolution": "1080x1920",
+  "fps": 60,
+  "source_type": "static_images",
+  "source_images_dir": "/ABSOLUTE/PATH/TO/YOUR_IMAGES_DIR",
+  "music": "",
+  "use_source_audio": false,
+  "duration": 0,
+  "per_image_duration": 4.2,
+  "subtitle_mode": "minimal",
+  "color_grade": "low_saturation_warm_grey_preserve_dark_cabinet_weight",
+  "style": "高端全屋定制",
+  "allow_downgrade": true,
+  "output_name": "example_static_image_l1_template"
+}
