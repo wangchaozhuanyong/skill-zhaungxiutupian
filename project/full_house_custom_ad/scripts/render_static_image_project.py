@@ -197,7 +197,16 @@ def motion_profile(shot_type: str, motion: str, index: int) -> tuple[float, floa
     return (0.052, 0.55, 0.24, 0.38, 0.28, "默认反向横移")
 
 
-def render_image_clip(item: dict[str, Any], dst: Path, width: int, height: int, fps: int, index: int) -> str:
+def render_image_clip(
+    item: dict[str, Any],
+    dst: Path,
+    width: int,
+    height: int,
+    fps: int,
+    index: int,
+    *,
+    fade_to_black: bool = False,
+) -> str:
     src = Path(item["path"])
     duration = float(item["computed_duration"])
     frames = max(1, int(round(duration * fps)))
@@ -212,17 +221,16 @@ def render_image_clip(item: dict[str, Any], dst: Path, width: int, height: int, 
         f"y='(ih-ih/zoom)*({start_y:.3f}+({end_y:.3f}-{start_y:.3f})*on/{frames})':"
         f"d={frames}:s={width}x{height}:fps={fps}"
     )
-    vf = ",".join(
-        [
-            f"scale={width * 2}:{height * 2}:force_original_aspect_ratio=increase:flags=lanczos",
-            f"crop={width * 2}:{height * 2}",
-            zoompan,
-            "eq=contrast=1.055:saturation=0.88:brightness=-0.004:gamma=0.99",
-            "unsharp=5:5:0.32:3:3:0.06",
-            "fade=t=in:st=0:d=0.18",
-            f"fade=t=out:st={fade_out:.2f}:d=0.25",
-        ]
-    )
+    filters = [
+        f"scale={width * 2}:{height * 2}:force_original_aspect_ratio=increase:flags=lanczos",
+        f"crop={width * 2}:{height * 2}",
+        zoompan,
+        "eq=contrast=1.055:saturation=0.88:brightness=-0.004:gamma=0.99",
+        "unsharp=5:5:0.32:3:3:0.06",
+    ]
+    if fade_to_black:
+        filters.extend(["fade=t=in:st=0:d=0.18", f"fade=t=out:st={fade_out:.2f}:d=0.25"])
+    vf = ",".join(filters)
     run(
         [
             ffmpeg_exe(),
@@ -497,6 +505,7 @@ def main() -> int:
     items, per_image_duration, duration = choose_images_and_duration(config, items, music)
     width, height = parse_resolution(str(config.get("resolution", "1080x1920")))
     fps = int(config.get("fps", 60))
+    fade_to_black = bool(config.get("fade_to_black", False))
 
     first_image_parent = Path(items[0]["path"]).parent
     continuity_report, report_path = run_validator(config_path, images_dir or first_image_parent, output_name)
@@ -513,7 +522,7 @@ def main() -> int:
             f"({item.get('shot_type', '')})",
             flush=True,
         )
-        render_image_clip(item, clip, width, height, fps, index)
+        render_image_clip(item, clip, width, height, fps, index, fade_to_black=fade_to_black)
         tmp_clips.append(clip)
 
     video_only = OUT_DIR / f"{output_name}_video_only.mp4"
