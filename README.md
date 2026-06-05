@@ -64,12 +64,16 @@ python scripts/render_project.py --config projects/example_self_generated_walkth
 
 这个入口用于 `strict_true_walkthrough`：当用户不提供素材，但明确要求“真正空间漫游型”“不要图片轮播”“不接受降级”时，只尝试生成单条 `continuous_ai_video`。成功后进入 L3 真正空间漫游候选；失败后输出 `L3_GENERATOR_NOT_READY` / `GENERATOR_NOT_READY`，不会自动降级 L2/L1，也不会第一轮要求用户上传 `source_video`。
 
+默认模板使用 `generation_execution_mode=codex_session`。它不会要求 `OPENAI_API_KEY` / `FAL_KEY`，而是代表“必须在当前 Codex 会话里有可调用的视频生成工具，或已暴露可调用的视频插件，例如 hyperframes”。如果当前会话没有这类 provider，会输出 `SESSION_VIDEO_PROVIDER_NOT_AVAILABLE`。
+
 对应关键配置字段：
 
 ```text
 auto_generate_assets=true
+generation_execution_mode=codex_session
 auto_generation_mode=strict_true_walkthrough
 allow_auto_downgrade=false
+session_video_provider_order=codex_video,hyperframes
 ```
 
 自动生成素材入口二：无用户素材，自动生成最高可执行版本：
@@ -103,6 +107,15 @@ Codex 交互式自动素材生成的默认顺序是：
 - `strict_true_walkthrough`：只尝试 `continuous_ai_video`，不自动降级。
 - `best_effort`：`continuous_ai_video` 可用时生成 L3 candidate；不可用再尝试 `segmented_ai_clips` L2；再不可用才尝试 `static_keyframes` / `gpt-image-2` L1。
 - 所有 API 后端不可用：输出 `GENERATOR_NOT_READY`，生成 auto assets report，不会第一轮要求用户上传 `source_video`。这个状态只代表脚本无人值守后端未就绪，不代表 Codex 交互模式不能做 L1。
+
+如果你明确要使用 API 无人值守 strict 模式，使用单独模板：
+
+```bash
+cd project/full_house_custom_ad
+python scripts/render_project.py --config projects/example_self_generated_walkthrough_api_unattended/project.json
+```
+
+这个模板才会检查 `FAL_KEY` 等脚本后端。默认日常调用不走它。
 
 如果本地不能直接调用 gpt-image-2，脚本只会写出 `prompt_pack.md` 和 `STATIC_IMAGE_GENERATION_PENDING`，不会伪造图片或假装已经生成成片。
 
@@ -182,7 +195,8 @@ L4 最终通过不能只改 `project.json`。必须保留 `output/<project>_sema
 - 多个独立 AI video clip：走 `assemble_segmented_ai_walkthrough_clips.py`
 - 静态图关键帧：走 `render_static_image_project.py`，只允许标注 L1 伪漫游/图片展示，不得冒充真正 walkthrough
 - 没有素材且在 Codex 交互式调用：默认由 Codex 设计/准备素材，再走 L1 渲染
-- 没有素材且 `auto_generate_assets=true` 或 `source_policy=auto_generate`：本地脚本先走 `generate_auto_project_assets.py`，自动尝试 API L3 -> L2 -> L1 最高可执行版本
+- 没有素材且 `generation_execution_mode=codex_session`：本地脚本输出 `SESSION_VIDEO_PROVIDER_NOT_AVAILABLE`，提示需要当前会话视频工具或 hyperframes 这类已暴露插件，不要求 API key 或上传素材
+- 没有素材且 `auto_generate_assets=true` 或 `source_policy=auto_generate` 且明确 `generation_execution_mode=api_unattended`：本地脚本先走 `generate_auto_project_assets.py`，自动尝试 API L3 -> L2 -> L1 最高可执行版本
 - 没有素材且所有 API 生成后端不可用：输出 `GENERATOR_NOT_READY`，但不要求上传 `source_video`
 - 没有素材且没有开启自动生成：只输出报告并停止
 
@@ -309,4 +323,4 @@ python scripts/check_v1_integrity.py
 
 ## 备注
 
-真正空间漫游需要真实连续视频、AI 连续视频或专业 3D 漫游素材。日常 Codex 调用不需要额外 API，默认能稳定做的是 L1 样片风格伪漫游；如果当前会话具备视频生成能力或你选择可选 API 后端，才进一步尝试 L2/L3。`strict_true_walkthrough` 代表“只要真正空间漫游，不接受降级”；`best_effort` 代表“自动生成最高可执行版本”。v1.0/v1.1/v1.2 不承诺从 0 稳定生成 L4。样片级连续空间漫游还必须通过连续性检查、样片级专项评分和人工空间语义复核文件校验。validator 的抽帧和帧差只提供基础视觉证据，不能自动证明电视墙、沙发、材质、灯光和空间比例语义一致。缺少连续素材时，skill 可以继续执行高质量降级方案，但必须清楚标注为图片展示、样片风格伪漫游或 AI 分段空间漫游，不能冒充同款样片级 walkthrough。
+真正空间漫游需要真实连续视频、AI 连续视频或专业 3D 漫游素材。日常 Codex 调用不需要额外 API，默认先检查当前会话视频生成能力和已暴露视频插件 provider，例如 hyperframes；如果当前会话没有可调用视频 provider，strict 模式输出 `SESSION_VIDEO_PROVIDER_NOT_AVAILABLE`，不要求 `OPENAI_API_KEY` / `FAL_KEY`，也不要求上传素材。`strict_true_walkthrough` 代表“只要真正空间漫游，不接受降级”；`best_effort` 代表“自动生成最高可执行版本”。API key 只用于你明确选择 `api_unattended` 本地脚本无人值守模式。v1.0/v1.1/v1.2 不承诺从 0 稳定生成 L4。样片级连续空间漫游还必须通过连续性检查、样片级专项评分和人工空间语义复核文件校验。validator 的抽帧和帧差只提供基础视觉证据，不能自动证明电视墙、沙发、材质、灯光和空间比例语义一致。缺少连续素材时，skill 可以继续执行高质量降级方案，但必须清楚标注为图片展示、样片风格伪漫游或 AI 分段空间漫游，不能冒充同款样片级 walkthrough。

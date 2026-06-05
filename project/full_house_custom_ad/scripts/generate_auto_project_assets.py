@@ -22,6 +22,8 @@ STRICT_TRUE_WALKTHROUGH = "strict_true_walkthrough"
 BEST_EFFORT = "best_effort"
 VALID_MODES = {STRICT_TRUE_WALKTHROUGH, BEST_EFFORT}
 CAPABILITY_RANK = {"L0": 0, "L1": 1, "L2": 2, "L3": 3, "L4": 4}
+CODEX_SESSION = "codex_session"
+API_UNATTENDED = "api_unattended"
 
 
 def load_config(path: Path) -> dict[str, Any]:
@@ -66,6 +68,54 @@ def backend_enabled(config: dict[str, Any], name: str) -> bool:
     if not isinstance(backend, dict):
         return True
     return bool(backend.get("enabled", True))
+
+
+def execution_mode(config: dict[str, Any]) -> str:
+    raw = str(config.get("generation_execution_mode") or "").strip().lower()
+    if raw in {CODEX_SESSION, "session", "codex"}:
+        return CODEX_SESSION
+    if raw in {API_UNATTENDED, "api", "local_api", "script"}:
+        return API_UNATTENDED
+    if config.get("api_backends_enabled") is False:
+        return CODEX_SESSION
+    return CODEX_SESSION
+
+
+def session_video_provider_order(config: dict[str, Any]) -> list[str]:
+    raw = config.get("session_video_provider_order")
+    if isinstance(raw, list) and raw:
+        return [str(item) for item in raw]
+    return ["codex_video", "hyperframes"]
+
+
+def write_session_provider_unavailable(
+    *,
+    report: Path,
+    project_id: str,
+    output_name: str,
+    mode: str,
+    target_level: str,
+    provider_order: list[str],
+) -> None:
+    provider_checks = {
+        provider: "not exposed as a callable tool in this Codex session"
+        for provider in provider_order
+    }
+    payload = {
+        "status": "SESSION_VIDEO_PROVIDER_NOT_AVAILABLE",
+        "project_id": project_id,
+        "output_name": output_name,
+        "generation_execution_mode": CODEX_SESSION,
+        "auto_generation_mode": mode,
+        "target_capability_level": target_level,
+        "session_video_provider_order": provider_order,
+        "session_video_provider_checks": provider_checks,
+        "error": "当前 Codex 会话没有可调用的连续视频生成工具，已暴露插件中也没有可用视频 provider。",
+        "note": "这不是要求上传素材，也不是要求配置 OPENAI_API_KEY/FAL_KEY；strict_true_walkthrough 不会降级 L2/L1。请在 Codex 会话中启用可调用视频插件，例如 hyperframes，或明确切换到 api_unattended 模式。",
+        "attempts": [],
+    }
+    report.parent.mkdir(parents=True, exist_ok=True)
+    report.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def normalize_mode(config: dict[str, Any]) -> str:
@@ -171,6 +221,7 @@ def main() -> int:
     project_id, output_name, generated_project, report = result_paths(config, config_path)
     mode = normalize_mode(config)
     target_level = target_capability(config, mode)
+    exec_mode = execution_mode(config)
     attempts: list[dict[str, Any]] = []
 
     if has_existing_source(config):
@@ -189,6 +240,7 @@ def main() -> int:
                 {
                     "status": "EXISTING_SOURCE",
                     "project_id": project_id,
+                    "generation_execution_mode": exec_mode,
                     "auto_generation_mode": mode,
                     "generated_project": str(generated_project),
                     "attempts": attempts,
@@ -208,6 +260,7 @@ def main() -> int:
                 {
                     "status": "AUTO_GENERATION_DISABLED",
                     "project_id": project_id,
+                    "generation_execution_mode": exec_mode,
                     "auto_generation_mode": mode,
                     "error": "No source assets and auto_generate_assets/source_policy=auto_generate is not enabled.",
                 },
@@ -219,6 +272,19 @@ def main() -> int:
         )
         print("AUTO_GENERATION_DISABLED")
         return 2
+
+    if exec_mode == CODEX_SESSION:
+        write_session_provider_unavailable(
+            report=report,
+            project_id=project_id,
+            output_name=output_name,
+            mode=mode,
+            target_level=target_level,
+            provider_order=session_video_provider_order(config),
+        )
+        print("SESSION_VIDEO_PROVIDER_NOT_AVAILABLE")
+        print(report)
+        return 11
 
     order = normalize_order(config, mode)
     allow_auto_downgrade = bool(config.get("allow_auto_downgrade", mode != STRICT_TRUE_WALKTHROUGH))

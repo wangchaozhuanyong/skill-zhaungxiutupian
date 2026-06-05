@@ -18,7 +18,7 @@
 
 Codex 交互式生成的默认决策：
 
-1. 若 `auto_generation_mode=strict_true_walkthrough`，只在当前会话有单条连续视频生成能力时生成 L3；没有该能力时输出 L3 生成器未就绪，不降级。
+1. 若 `auto_generation_mode=strict_true_walkthrough`，先检查当前会话视频生成工具，再检查已暴露视频插件（例如 hyperframes）。没有该能力时输出 `SESSION_VIDEO_PROVIDER_NOT_AVAILABLE`，不降级、不要求 API key、不要求上传素材。
 2. 若 `auto_generation_mode=best_effort`，用当前会话能力生成或准备静态关键帧。
 3. 生成 L1 project.json。
 4. 本地渲染 L1 样片风格伪漫游。
@@ -133,6 +133,7 @@ D 类型必须先判断能力和素材：
 - 不得因为缺视频后端而停止全部工作；可以给降级方案，但必须标注降级。
 - 自动生成模式下不得第一轮要求用户上传 source_video。
 - 用户拒绝接 API 时，不得继续要求 `OPENAI_API_KEY` / `FAL_KEY`；必须切回 Codex 交互式生成。
+- 用户拒绝 API 且要求 strict_true_walkthrough 时，如果会话/插件视频 provider 不可用，必须输出 `SESSION_VIDEO_PROVIDER_NOT_AVAILABLE`。
 - 不得伪造 gpt-image-2 或 AI video 已经生成成功；后端不可用时必须输出 GENERATOR_NOT_READY 或 STATIC_IMAGE_GENERATION_PENDING。
 
 ## 推荐表达

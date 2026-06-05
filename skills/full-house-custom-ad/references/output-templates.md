@@ -15,6 +15,9 @@
 自动素材生成模式：
 生成模式：
 自动生成模式：
+会话视频生成工具：
+视频插件 provider：
+hyperframes 是否可调用：
 用户是否提供素材：
 素材来源：
 本次将自动生成的素材类型：
@@ -25,6 +28,7 @@
 是否允许自动降级：
 自动生成路径：
 是否需要额外 API：
+SESSION_VIDEO_PROVIDER_NOT_AVAILABLE 状态：
 本次样片级连续漫游判断：
 本次目标客户：
 本次客户心理按钮：
@@ -79,6 +83,8 @@ GENERATOR_NOT_READY 状态：
 - 是否明确选择 API 无人值守模式；只有选择后才按 continuous_ai_video -> segmented_ai_clips -> static_keyframes 自动尝试
 - 自动生成模式是 strict_true_walkthrough 还是 best_effort
 - strict_true_walkthrough 是否只尝试 L3 且不自动降级
+- Codex 交互 strict 是否检查会话视频工具和视频插件 provider
+- hyperframes 是否实际暴露为可调用工具
 - 是否需要额外 API；日常 Codex 交互模式应为“否”
 - 可用生成后端是什么
 - 如果 API 无人值守后端不可用，是否输出 GENERATOR_NOT_READY 并回到 Codex 交互式 L1 方案，而不是要求上传 source_video
@@ -194,7 +200,7 @@ GENERATOR_NOT_READY 状态：
 如果本次目标是样片级连续空间漫游，必须达到 L4。真实连续视频、专业 3D 漫游导出或单条连续 AI video 才可能达到 L3/L4；若只有静态图，只能执行 L1“样片风格伪漫游”；若是多个独立 AI clip 拼接，默认只能执行 L2“AI 分段空间漫游”。L1/L2 不得称为真正 walkthrough 或同款样片级漫游。
 
 自动原创素材生成约束：
-如果用户明确不提供素材或要求系统自己制作素材，必须先启用自动生成素材模式。默认生成模式是 Codex 交互式生成，不要求 OPENAI_API_KEY / FAL_KEY。若用户明确要求真正空间漫游且不接受降级，`auto_generation_mode=strict_true_walkthrough`，只尝试 L3 单条连续视频；失败输出 L3_GENERATOR_NOT_READY / GENERATOR_NOT_READY，不得降级 L2/L1。若用户要求测试片或最高可执行版本，`auto_generation_mode=best_effort`，才允许按 L3 -> L2 -> L1 自动兜底。continuous_ai_video 成功只能标 L3 candidate；segmented_ai_clips 成功只能标 L2；static_keyframes 成功只能标 L1；API 后端全部不可用时输出 GENERATOR_NOT_READY，但不得要求上传 source_video，也不得伪造 gpt-image-2 或 AI video 已生成成功。
+如果用户明确不提供素材或要求系统自己制作素材，必须先启用自动生成素材模式。默认生成模式是 Codex 交互式生成，不要求 OPENAI_API_KEY / FAL_KEY。若用户明确要求真正空间漫游且不接受降级，`auto_generation_mode=strict_true_walkthrough`，只尝试 L3 单条连续视频；Codex 交互模式下先检查会话视频工具和已暴露视频插件 provider，若不可用输出 SESSION_VIDEO_PROVIDER_NOT_AVAILABLE，不得降级 L2/L1，不得要求 API key 或 source_video。若用户明确选择 API 无人值守模式，strict 失败才输出 L3_GENERATOR_NOT_READY / GENERATOR_NOT_READY。若用户要求测试片或最高可执行版本，`auto_generation_mode=best_effort`，才允许按 L3 -> L2 -> L1 自动兜底。continuous_ai_video 成功只能标 L3 candidate；segmented_ai_clips 成功只能标 L2；static_keyframes 成功只能标 L1；API 后端全部不可用时输出 GENERATOR_NOT_READY，但不得要求上传 source_video，也不得伪造 gpt-image-2 或 AI video 已生成成功。
 
 连续性报告：
 必须输出或引用 continuity_report.md，说明是否单条连续视频、是否多 clip 拼接、是否静态图运镜、素材就绪状态、是否通过连续性检查、是否允许称为真正 walkthrough、是否允许称为样片级连续空间漫游。样片级目标必须同时输出 keyframe_sheet、max_delta_pair_sheet、sampled_frame_count、scene_change_count、avg_frame_delta、max_frame_delta、max_delta_from_frame、max_delta_to_frame、hard_cut_risk、motion_continuity_risk、visual_evidence_available、manual_review_required、semantic_review_required、semantic_review_file、semantic_review_file_exists、semantic_review_file_valid、semantic_review_reviewer、semantic_review_date、semantic_review_conclusion、semantic_review_source_hash、semantic_review_expected_source_hash、sample_level_score、sample_level_score_passed、sample_level_score_severe、semantic_review_errors 和 l4_gate_result。`manual_semantic_review_passed=true` 只能作为兼容字段，不得单独通过 L4。

@@ -223,6 +223,24 @@ capability_level=L1
 - 默认最高稳定可执行等级是 L1 样片风格伪漫游。
 - L2/L3 只能在当前会话具备视频生成工具、用户提供连续视频，或用户主动选择 API 无人值守模式时执行。
 
+## 用户拒绝 API，要求用 hyperframes 做真正空间漫游
+
+用户：
+
+```text
+我不要 OPENAI_API_KEY / FAL_KEY，直接用你和 hyperframes 做真正空间漫游。
+```
+
+期望行为：
+
+- 必须启用 Codex 交互式生成模式。
+- 必须检查 hyperframes 是否暴露为可调用工具。
+- 如果 hyperframes 不可调用，输出 `SESSION_VIDEO_PROVIDER_NOT_AVAILABLE`。
+- 不得继续要求用户配置 `OPENAI_API_KEY` 或 `FAL_KEY`。
+- 不得要求用户上传 `source_video`。
+- strict_true_walkthrough 不得自动降级 L2/L1。
+- 如果 hyperframes 可调用，才能用它生成单条连续 AI video 并进入 L3 candidate。
+
 ## 用户不提供素材，要求真正空间漫游且不接受降级
 
 用户：

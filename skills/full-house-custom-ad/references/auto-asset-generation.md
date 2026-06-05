@@ -35,9 +35,11 @@
 `strict_true_walkthrough` 用于真正空间漫游硬目标：
 
 - 触发：用户说真正空间漫游、不要图片轮播、不要分段 clip、不接受降级、必须像走进房子一样。
-- 行为：只尝试单条连续 AI video / L3 路径。
+- Codex 交互行为：先检查当前会话视频生成工具，再检查已暴露视频插件（例如 hyperframes）。
+- API 无人值守行为：只有用户明确选择脚本无人值守时，才调用本地 API 后端。
 - 成功：`source_type=continuous_ai_video`，capability level 为 L3 candidate，可称为真正空间漫游型。
-- 失败：输出 `L3_GENERATOR_NOT_READY` / `GENERATOR_NOT_READY`，不得降级 L2/L1，不得要求用户上传素材。
+- Codex 交互失败：输出 `SESSION_VIDEO_PROVIDER_NOT_AVAILABLE`，不得要求 API key，不得降级 L2/L1，不得要求用户上传素材。
+- API 无人值守失败：输出 `L3_GENERATOR_NOT_READY` / `GENERATOR_NOT_READY`，不得降级 L2/L1，不得要求用户上传素材。
 
 `best_effort` 用于最高可执行测试目标：
 
@@ -96,6 +98,9 @@ v1.1 已内置 FAL queue provider：
 自动素材生成模式：已启用
 生成模式：Codex 交互式生成 / API 无人值守模式
 自动生成模式：strict_true_walkthrough / best_effort
+会话视频生成工具：
+视频插件 provider：
+hyperframes 是否可调用：
 用户是否提供素材：否
 素材来源：自动生成
 本次将自动生成的素材类型：
@@ -105,6 +110,7 @@ v1.1 已内置 FAL queue provider：
 是否允许自动降级：
 最终输出等级命名：
 是否需要额外 API：
+SESSION_VIDEO_PROVIDER_NOT_AVAILABLE 状态：
 GENERATOR_NOT_READY 状态：
 如果不能生成，原因：
 ```

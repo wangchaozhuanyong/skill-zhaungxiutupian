@@ -29,12 +29,21 @@ Codex 交互式素材生成模式是日常默认模式。用户在 ChatGPT/Codex
 - 不承诺直接生成 L2/L3 视频素材；
 - 可先输出 L1 成片；
 - 同时说明 L2/L3 需要可用的会话视频生成工具、用户提供连续视频、或用户明确选择 API 自动后端。
+- 如果用户要求 `strict_true_walkthrough` 且拒绝 API / 上传素材，必须输出 `SESSION_VIDEO_PROVIDER_NOT_AVAILABLE`，不得要求 `OPENAI_API_KEY` / `FAL_KEY`，不得自动降级 L2/L1。
 
 如果当前 Codex 会话未来具备视频生成工具：
 
 - 单条连续视频才可能进入 L3 candidate；
 - 多段独立视频 clip 只能标 L2；
 - L4 仍需连续性报告、视觉证据、专项评分和人工复核。
+
+## 插件视频 provider
+
+当用户明确要求使用视频插件（例如 `hyperframes`）时，必须先检查该插件是否在当前 Codex 会话中暴露为可调用工具。
+
+- 如果可调用：可作为 L3 单条连续视频 provider。
+- 如果不可调用：输出 `SESSION_VIDEO_PROVIDER_NOT_AVAILABLE`，说明插件名可见不等于工具已暴露。
+- 不得把插件未暴露转写成需要 `OPENAI_API_KEY` / `FAL_KEY`。
 
 ## API 自动后端的地位
 

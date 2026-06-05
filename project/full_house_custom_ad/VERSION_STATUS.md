@@ -2,7 +2,7 @@
 
 当前版本：v1.0-final-auto-assets
 
-当前增量：v1.2-final-generation-modes
+当前增量：v1.3-session-video-provider-default
 
 已完成增量：v1.1-l1-auto-render, v1.1-l2-l3-fal-backend, v1.1-codex-interactive-default
 
@@ -15,6 +15,7 @@
 - Auto Assets：用户不提供素材时，系统会自动尝试生成素材；默认走 Codex 交互式生成，不要求额外 API。
 - Optional API Backends：只有用户明确选择无人值守或批量脚本化生产时，才按 L3 -> L2 -> L1 顺序调用 API 后端。
 - Generation Modes：`strict_true_walkthrough` 只尝试 L3 真正空间漫游；`best_effort` 才允许 L3 -> L2 -> L1 自动兜底。
+- Session Video Providers：日常 strict_true_walkthrough 默认检查 Codex 当前会话视频工具和已暴露插件 provider，例如 hyperframes；API key 只属于可选 api_unattended。
 
 ## 不承诺能力
 
@@ -46,10 +47,12 @@ L4 必须同时满足：
 2. 如果用户明确要求真正空间漫游且不接受降级，启用 `strict_true_walkthrough`，只尝试 L3 单条连续视频；
 3. 如果用户要求测试片或最高可执行版本，启用 `best_effort`，才允许 L3 -> L2 -> L1 自动兜底；
 4. 当前会话可生成图片且处于 best_effort 时，先生成或准备静态关键帧，再进入 L1 样片风格伪漫游；
-5. 只有用户明确选择 API 无人值守模式，才调用本地 API 后端自动生成；
-6. 如果 API 无人值守后端全部不可用，输出 `GENERATOR_NOT_READY`，但这只代表脚本自动化后端未就绪；
-7. strict 模式失败不得自动降级 L2/L1；
-8. 不得第一轮要求用户上传 source_video，也不得把缺少 API key 说成 Codex 交互模式不能做 L1。
+5. strict 模式默认检查当前会话视频生成工具和已暴露视频插件 provider，例如 hyperframes；
+6. 如果当前会话没有可调用视频 provider，输出 `SESSION_VIDEO_PROVIDER_NOT_AVAILABLE`，不得要求 API key 或上传素材；
+7. 只有用户明确选择 `api_unattended` API 无人值守模式，才调用本地 API 后端自动生成；
+8. 如果 API 无人值守后端全部不可用，输出 `GENERATOR_NOT_READY`，但这只代表脚本自动化后端未就绪；
+9. strict 模式失败不得自动降级 L2/L1；
+10. 不得第一轮要求用户上传 source_video，也不得把缺少 API key 说成 Codex 交互模式不能做 L1。
 
 ## 冻结原则
 
@@ -108,3 +111,13 @@ v1.2 不继续堆新能力，只把自动生成模式分清：
 3. `strict_true_walkthrough` 不得自动降级 L2/L1。
 4. `best_effort` 发生降级时必须写明 `auto_downgraded=true`、`auto_generation_path` 和最终正确命名。
 5. L3 自动生成时，单条连续视频优先于音乐完整长度，音乐可裁切或淡出。
+
+## v1.3 会话视频 provider 默认
+
+v1.3 把真正空间漫游 strict 的默认路线从 API key 改为当前会话/插件 provider：
+
+1. 默认 `generation_execution_mode=codex_session`。
+2. strict 模式先检查 Codex 当前会话视频生成能力和已暴露插件 provider，例如 hyperframes。
+3. 当前会话/插件不可用时输出 `SESSION_VIDEO_PROVIDER_NOT_AVAILABLE`。
+4. 不要求 `OPENAI_API_KEY` / `FAL_KEY`，不要求上传素材，不降级 L2/L1。
+5. 只有用户明确选择 `generation_execution_mode=api_unattended` 时，才检查 `OPENAI_API_KEY` / `FAL_KEY` 等脚本后端。

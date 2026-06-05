@@ -128,6 +128,10 @@ def main() -> int:
             if report.get("error"):
                 print(report["error"])
             print("自动素材生成没有产出可渲染素材。不会要求用户上传 source_video。")
+            if status == "SESSION_VIDEO_PROVIDER_NOT_AVAILABLE":
+                providers = report.get("session_video_provider_order") or ["codex_video", "hyperframes"]
+                print(f"当前会话未暴露可调用视频 provider：{', '.join(str(item) for item in providers)}。")
+                print("这不是要求 OPENAI_API_KEY / FAL_KEY；API 只在明确切换到 api_unattended 模式时使用。")
             if status == "L3_GENERATOR_NOT_READY":
                 print("strict_true_walkthrough 模式只允许 L3 单条连续视频，不会自动降级 L2/L1。")
             return 10
