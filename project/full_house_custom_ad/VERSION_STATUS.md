@@ -2,9 +2,9 @@
 
 当前版本：v1.0-final-auto-assets
 
-当前增量：v1.1-codex-interactive-default
+当前增量：v1.2-final-generation-modes
 
-已完成增量：v1.1-l1-auto-render, v1.1-l2-l3-fal-backend
+已完成增量：v1.1-l1-auto-render, v1.1-l2-l3-fal-backend, v1.1-codex-interactive-default
 
 ## 已完成能力
 
@@ -14,6 +14,7 @@
 - L4：样片级连续空间漫游，必须通过连续性检查、视觉证据、专项评分和人工空间语义复核后才能标记。
 - Auto Assets：用户不提供素材时，系统会自动尝试生成素材；默认走 Codex 交互式生成，不要求额外 API。
 - Optional API Backends：只有用户明确选择无人值守或批量脚本化生产时，才按 L3 -> L2 -> L1 顺序调用 API 后端。
+- Generation Modes：`strict_true_walkthrough` 只尝试 L3 真正空间漫游；`best_effort` 才允许 L3 -> L2 -> L1 自动兜底。
 
 ## 不承诺能力
 
@@ -42,12 +43,13 @@ L4 必须同时满足：
 当用户不提供素材时：
 
 1. 默认启用 Codex 交互式生成模式，不要求用户配置 `OPENAI_API_KEY` / `FAL_KEY`；
-2. 当前会话可生成图片时，先生成或准备静态关键帧，再进入 L1 样片风格伪漫游；
-3. 只有用户明确选择 API 无人值守模式，才优先尝试生成单条连续 AI video，成功则进入 L3 候选；
-4. 如果连续 AI video 不可用，API 无人值守模式再尝试多个 AI video clip，成功则进入 L2；
-5. 如果 AI video 不可用，API 无人值守模式再尝试 OpenAI Image API 静态关键帧，成功则进入 L1；
+2. 如果用户明确要求真正空间漫游且不接受降级，启用 `strict_true_walkthrough`，只尝试 L3 单条连续视频；
+3. 如果用户要求测试片或最高可执行版本，启用 `best_effort`，才允许 L3 -> L2 -> L1 自动兜底；
+4. 当前会话可生成图片且处于 best_effort 时，先生成或准备静态关键帧，再进入 L1 样片风格伪漫游；
+5. 只有用户明确选择 API 无人值守模式，才调用本地 API 后端自动生成；
 6. 如果 API 无人值守后端全部不可用，输出 `GENERATOR_NOT_READY`，但这只代表脚本自动化后端未就绪；
-7. 不得第一轮要求用户上传 source_video，也不得把缺少 API key 说成 Codex 交互模式不能做 L1。
+7. strict 模式失败不得自动降级 L2/L1；
+8. 不得第一轮要求用户上传 source_video，也不得把缺少 API key 说成 Codex 交互模式不能做 L1。
 
 ## 冻结原则
 
@@ -96,3 +98,13 @@ v1.1 收口后，日常使用默认不要求 API：
 4. 本地脚本只负责保存素材、生成 project.json、渲染 L1 样片风格伪漫游；
 5. `OPENAI_API_KEY` / `FAL_KEY` 只用于本地脚本无人值守、批量生产或用户明确选择 API 自动后端；
 6. 缺少 API key 不得成为“不能做视频”的理由，只能说明 L2/L3 自动后端未启用。
+
+## v1.2 生成模式收口
+
+v1.2 不继续堆新能力，只把自动生成模式分清：
+
+1. `strict_true_walkthrough`：用于“真正空间漫游型、不接受降级”。只尝试 `continuous_ai_video`，成功为 L3 candidate，失败为 `L3_GENERATOR_NOT_READY` / `GENERATOR_NOT_READY`。
+2. `best_effort`：用于“自己生成素材、最高质量测试片”。按 L3 -> L2 -> L1 尝试最高可执行版本。
+3. `strict_true_walkthrough` 不得自动降级 L2/L1。
+4. `best_effort` 发生降级时必须写明 `auto_downgraded=true`、`auto_generation_path` 和最终正确命名。
+5. L3 自动生成时，单条连续视频优先于音乐完整长度，音乐可裁切或淡出。

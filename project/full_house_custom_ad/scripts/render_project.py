@@ -17,6 +17,7 @@ CONTINUOUS_RENDERER = ROOT / "scripts" / "render_continuous_video_project.py"
 STATIC_RENDERER = ROOT / "scripts" / "render_static_image_project.py"
 CONTINUOUS_SOURCE_TYPES = {"real_video", "3d_walkthrough", "continuous_ai_video"}
 VIDEO_EXTS = {".mp4", ".mov", ".m4v", ".webm"}
+IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp"}
 
 
 def load_config(path: Path) -> dict[str, Any]:
@@ -38,6 +39,14 @@ def collect_video_files(path: Path | None) -> list[Path]:
     return sorted(p for p in path.rglob("*") if p.is_file() and p.suffix.lower() in VIDEO_EXTS)
 
 
+def collect_image_files(path: Path | None) -> list[Path]:
+    if not path or not path.exists():
+        return []
+    if path.is_file():
+        return [path] if path.suffix.lower() in IMAGE_EXTS else []
+    return sorted(p for p in path.rglob("*") if p.is_file() and p.suffix.lower() in IMAGE_EXTS)
+
+
 def run(cmd: list[str], *, check: bool = True) -> subprocess.CompletedProcess[str]:
     proc = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     if proc.stdout:
@@ -56,7 +65,8 @@ def has_segmented_clips(config: dict[str, Any]) -> bool:
 
 def has_static_images(config: dict[str, Any]) -> bool:
     source_type = str(config.get("source_type", ""))
-    return source_type in {"static_images", "static_images_no_depth"} or bool(config.get("source_images_dir"))
+    images_dir = resolve_path(config.get("source_images_dir"))
+    return source_type in {"static_images", "static_images_no_depth"} and bool(collect_image_files(images_dir))
 
 
 def has_continuous_video(config: dict[str, Any]) -> bool:
@@ -80,6 +90,20 @@ def generated_config_path(config: dict[str, Any], config_path: Path) -> Path:
     return ROOT / "output" / f"{project_id}_generated_project.json"
 
 
+def auto_report_path(config: dict[str, Any], config_path: Path) -> Path:
+    project_id = str(config.get("project_id", config_path.parent.name))
+    return ROOT / "output" / f"{project_id}_auto_assets_report.json"
+
+
+def read_json(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Render a full house custom ad project from project.json.")
     parser.add_argument("--config", required=True, help="Project JSON config")
@@ -92,13 +116,20 @@ def main() -> int:
 
     if not has_any_renderable_source(config) and auto_generation_enabled(config):
         print("自动素材生成模式：已启用")
+        print(f"自动生成模式：{config.get('auto_generation_mode', 'best_effort')}")
         print("用户是否提供素材：否")
         print("素材来源：自动生成")
         proc = run([sys.executable, str(AUTO_ASSET_GENERATOR), "--config", str(config_path)], check=False)
         next_config_path = generated_config_path(config, config_path)
         if proc.returncode != 0 or not next_config_path.exists():
-            print("GENERATOR_NOT_READY")
-            print("所有 API 无人值守生成后端均未产出可渲染素材。不会要求用户上传 source_video。")
+            report = read_json(auto_report_path(config, config_path))
+            status = str(report.get("status") or "GENERATOR_NOT_READY")
+            print(status)
+            if report.get("error"):
+                print(report["error"])
+            print("自动素材生成没有产出可渲染素材。不会要求用户上传 source_video。")
+            if status == "L3_GENERATOR_NOT_READY":
+                print("strict_true_walkthrough 模式只允许 L3 单条连续视频，不会自动降级 L2/L1。")
             return 10
         config_path = next_config_path.resolve()
         config = load_config(config_path)

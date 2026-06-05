@@ -359,6 +359,12 @@ def write_plan(
 
 本次视频类型：{downgrade_name}
 本次 capability level：{assessed or '未确认'}
+素材来源：{config.get('asset_origin', '用户提供 / 本地已有')}
+自动素材生成模式：{'启用' if config.get('auto_generated_assets') else '未启用'}
+自动生成模式：{config.get('auto_generation_mode', '未启用')}
+自动生成路径：{config.get('auto_generation_path', '未启用')}
+是否发生自动降级：{'是' if config.get('auto_downgraded') else '否'}
+是否允许自动降级：{'是' if config.get('allow_auto_downgrade') else '否'}
 是否单条连续视频：{'是' if continuity_report.get('is_single_continuous_video') else '否'}
 是否多 clip 拼接：{'是' if continuity_report.get('is_multi_clip') else '否'}
 是否静态图运镜：{'是' if continuity_report.get('is_static_image_motion') else '否'}

@@ -11,19 +11,26 @@
 - Codex 交互式生成：默认。用户在 ChatGPT/Codex 里直接让我们做，不要求配置 API key。
 - API 无人值守生成：可选。只有用户明确要求本地脚本批量自动跑，或明确愿意配置 API key，才进入。
 
+再判断自动生成模式：
+
+- `strict_true_walkthrough`：用户明确要求真正空间漫游、不要图片轮播、不要多段 clip、不接受降级时启用。只允许 L3 单条连续视频路径；失败时输出 `L3_GENERATOR_NOT_READY` / `GENERATOR_NOT_READY`，不得转 L2/L1。
+- `best_effort`：用户要求自己生成素材、做测试片、尽量做到最高质量时启用。允许 L3 -> L2 -> L1 自动兜底，但必须写明是否发生自动降级。
+
 Codex 交互式生成的默认决策：
 
-1. 用当前会话能力生成或准备静态关键帧；
-2. 生成 L1 project.json；
-3. 本地渲染 L1 样片风格伪漫游；
-4. 如果没有会话视频生成工具，不承诺 L2/L3，但也不要求用户上传 `source_video`。
+1. 若 `auto_generation_mode=strict_true_walkthrough`，只在当前会话有单条连续视频生成能力时生成 L3；没有该能力时输出 L3 生成器未就绪，不降级。
+2. 若 `auto_generation_mode=best_effort`，用当前会话能力生成或准备静态关键帧。
+3. 生成 L1 project.json。
+4. 本地渲染 L1 样片风格伪漫游。
+5. 如果没有会话视频生成工具，不承诺 L2/L3，但也不要求用户上传 `source_video`。
 
 API 无人值守模式的决策顺序：
 
-1. 尝试 `continuous_ai_video`：成功后 `source_type=continuous_ai_video`，capability level 为 L3 candidate。
-2. 不可用则尝试 `segmented_ai_clips`：成功后 `source_type=segmented_ai_clips`，capability level 为 L2。
-3. 不可用则尝试 `static_keyframes` / `gpt-image-2`：成功后 `source_type=static_images`，capability level 为 L1。
-4. 全部不可用则输出 `GENERATOR_NOT_READY`，但这只代表 API 无人值守后端未就绪；不得要求用户第一轮上传 `source_video`，应给 Codex 交互式 L1 方案。
+1. `strict_true_walkthrough`：只尝试 `continuous_ai_video`。成功后 `source_type=continuous_ai_video`，capability level 为 L3 candidate；失败则输出 `L3_GENERATOR_NOT_READY` / `GENERATOR_NOT_READY`，不得降级。
+2. `best_effort`：先尝试 `continuous_ai_video`，成功为 L3 candidate。
+3. L3 不可用则尝试 `segmented_ai_clips`，成功为 L2。
+4. L2 不可用则尝试 `static_keyframes` / `gpt-image-2`，成功为 L1。
+5. 全部不可用则输出 `GENERATOR_NOT_READY`，但这只代表 API 无人值守后端未就绪；不得要求用户第一轮上传 `source_video`，应给 Codex 交互式 L1 方案。
 
 自动生成模式不会让 L1/L2 升级为 L3/L4。它只负责自动产出当前最高可执行素材，并按真实素材能力命名。
 
@@ -113,7 +120,7 @@ D 类型必须先判断能力和素材：
 如果用户坚持要真正连续感：
 
 - 如果用户愿意提供素材，可以说明真实连续视频、专业 3D 漫游导出或单条连续 AI video 是 L3/L4 的来源。
-- 如果用户明确不提供素材，必须进入自动原创素材生成模式；默认 Codex 交互式生成 L1，只有用户明确选择 API 无人值守模式时才按 continuous_ai_video -> segmented_ai_clips -> static_keyframes 自动尝试；不得第一轮要求上传素材或要求配置 API。
+- 如果用户明确不提供素材，必须进入自动原创素材生成模式；默认 `auto_generation_mode=strict_true_walkthrough`，只尝试 L3 单条连续视频。只有用户明确接受降级或说“最高可执行版本/测试片”时，才切换到 `best_effort` 并允许 L3 -> L2 -> L1；不得第一轮要求上传素材或要求配置 API。
 - 可以同时给“自动生成后的最高可执行方案”和“若未来有 L3/L4 素材后的升级方案”。
 
 ## 禁止行为

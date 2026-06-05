@@ -55,14 +55,39 @@ python scripts/render_project.py --config projects/example_l4_target_missing_ass
 
 如果只是查看 L4 缺素材报告，可以使用 `--allow-downgrade`。如果要验证系统是否会拦截 L4 过度声明，请去掉 `--allow-downgrade`，此时不满足 L4 会返回失败码。
 
-自动生成素材入口：
+自动生成素材入口一：无用户素材，自动生成真正空间漫游 L3 候选：
 
 ```bash
 cd project/full_house_custom_ad
 python scripts/render_project.py --config projects/example_self_generated_walkthrough/project.json
 ```
 
-这个入口用于 v1.0-final-auto-assets：当用户不提供素材、要求系统自己制作素材、自动生成素材、做测试片或从零做原创空间时，`render_project.py` 会先启用 `auto_generate_assets` 自动生成素材模式。
+这个入口用于 `strict_true_walkthrough`：当用户不提供素材，但明确要求“真正空间漫游型”“不要图片轮播”“不接受降级”时，只尝试生成单条 `continuous_ai_video`。成功后进入 L3 真正空间漫游候选；失败后输出 `L3_GENERATOR_NOT_READY` / `GENERATOR_NOT_READY`，不会自动降级 L2/L1，也不会第一轮要求用户上传 `source_video`。
+
+对应关键配置字段：
+
+```text
+auto_generate_assets=true
+auto_generation_mode=strict_true_walkthrough
+allow_auto_downgrade=false
+```
+
+自动生成素材入口二：无用户素材，自动生成最高可执行版本：
+
+```bash
+cd project/full_house_custom_ad
+python scripts/render_project.py --config projects/example_self_generated_best_effort/project.json
+```
+
+这个入口用于 `best_effort`：当用户说“你自己生成素材”“做测试片”“尽量做出最高质量版本”时，按 L3 -> L2 -> L1 尝试最高可执行版本。只有这里才允许自动降级，但必须写明最终 capability level 和正确命名。
+
+对应关键配置字段：
+
+```text
+auto_generate_assets=true
+auto_generation_mode=best_effort
+allow_auto_downgrade=true
+```
 
 这里的 `render_project.py` 是本地脚本无人值守入口，不能直接调用 Codex 聊天窗口里的会员能力。日常让 Codex 交互式制作时，不需要先跑这个 API 入口。
 
@@ -75,9 +100,8 @@ Codex 交互式自动素材生成的默认顺序是：
 
 本地脚本无人值守模式的后端顺序是：
 
-- `continuous_ai_video` 可用：生成单条连续 AI video，进入 L3 candidate，再走真正空间漫游后期；不自动保证 L4。
-- `segmented_ai_clips` 可用：生成多个 AI video clip，进入 L2 AI 分段空间漫游；不得叫 L3/L4。
-- `static_keyframes` / `gpt-image-2` 可用：生成静态关键帧，进入 L1 样片风格伪漫游；不得叫 true walkthrough。
+- `strict_true_walkthrough`：只尝试 `continuous_ai_video`，不自动降级。
+- `best_effort`：`continuous_ai_video` 可用时生成 L3 candidate；不可用再尝试 `segmented_ai_clips` L2；再不可用才尝试 `static_keyframes` / `gpt-image-2` L1。
 - 所有 API 后端不可用：输出 `GENERATOR_NOT_READY`，生成 auto assets report，不会第一轮要求用户上传 `source_video`。这个状态只代表脚本无人值守后端未就绪，不代表 Codex 交互模式不能做 L1。
 
 如果本地不能直接调用 gpt-image-2，脚本只会写出 `prompt_pack.md` 和 `STATIC_IMAGE_GENERATION_PENDING`，不会伪造图片或假装已经生成成片。
@@ -274,6 +298,15 @@ python scripts/check_v1_1_codex_mode_integrity.py
 V1.1 Codex interactive mode integrity check passed.
 ```
 
+v1.2 生成模式检查：
+
+```bash
+cd project/full_house_custom_ad
+python scripts/check_v1_integrity.py
+```
+
+检查内容包含 `strict_true_walkthrough`、`best_effort`、自生成项目模板和自动降级字段。
+
 ## 备注
 
-真正空间漫游需要真实连续视频、AI 连续视频或专业 3D 漫游素材。日常 Codex 调用不需要额外 API，默认能稳定做的是 L1 样片风格伪漫游；如果当前会话具备视频生成能力或你选择可选 API 后端，才进一步尝试 L2/L3。v1.0/v1.1 不承诺从 0 稳定生成 L4。样片级连续空间漫游还必须通过连续性检查、样片级专项评分和人工空间语义复核文件校验。validator 的抽帧和帧差只提供基础视觉证据，不能自动证明电视墙、沙发、材质、灯光和空间比例语义一致。缺少连续素材时，skill 可以继续执行高质量降级方案，但必须清楚标注为图片展示、样片风格伪漫游或 AI 分段空间漫游，不能冒充同款样片级 walkthrough。
+真正空间漫游需要真实连续视频、AI 连续视频或专业 3D 漫游素材。日常 Codex 调用不需要额外 API，默认能稳定做的是 L1 样片风格伪漫游；如果当前会话具备视频生成能力或你选择可选 API 后端，才进一步尝试 L2/L3。`strict_true_walkthrough` 代表“只要真正空间漫游，不接受降级”；`best_effort` 代表“自动生成最高可执行版本”。v1.0/v1.1/v1.2 不承诺从 0 稳定生成 L4。样片级连续空间漫游还必须通过连续性检查、样片级专项评分和人工空间语义复核文件校验。validator 的抽帧和帧差只提供基础视觉证据，不能自动证明电视墙、沙发、材质、灯光和空间比例语义一致。缺少连续素材时，skill 可以继续执行高质量降级方案，但必须清楚标注为图片展示、样片风格伪漫游或 AI 分段空间漫游，不能冒充同款样片级 walkthrough。

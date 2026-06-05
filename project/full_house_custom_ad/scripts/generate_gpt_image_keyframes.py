@@ -102,6 +102,7 @@ def main() -> int:
                 "generated_capability_level": "L1",
                 "source_images_dir": str(out_dir),
                 "image_count": 0,
+                "asset_origin": "auto_generated",
                 "error": "Prompt pack did not contain any prompts.",
             },
         )
@@ -128,6 +129,7 @@ def main() -> int:
                 "generated_capability_level": "L1",
                 "source_images_dir": str(out_dir),
                 "image_count": 0,
+                "asset_origin": "auto_generated",
                 "provider": "openai_images",
                 "model": model,
                 "prompt_pack": str(prompt_pack),
@@ -189,6 +191,7 @@ def main() -> int:
             "generated_capability_level": "L1",
             "source_images_dir": str(out_dir),
             "image_count": image_count,
+            "asset_origin": "auto_generated",
             "provider": "openai_images",
             "model": model,
             "size": size,

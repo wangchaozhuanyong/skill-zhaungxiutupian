@@ -223,6 +223,78 @@ capability_level=L1
 - 默认最高稳定可执行等级是 L1 样片风格伪漫游。
 - L2/L3 只能在当前会话具备视频生成工具、用户提供连续视频，或用户主动选择 API 无人值守模式时执行。
 
+## 用户不提供素材，要求真正空间漫游且不接受降级
+
+用户：
+
+```text
+我不提供素材，你自己制作一个真正空间漫游测试片，不接受图片轮播，也不要多段 clip。
+```
+
+期望行为：
+
+- 必须启用自动原创素材生成模式。
+- `auto_generation_mode` 必须是 `strict_true_walkthrough`。
+- 不得要求用户上传 `source_video`。
+- 只尝试 `continuous_ai_video` / L3 单条连续视频路径。
+- 成功时只能输出 L3 真正空间漫游型候选，不得自动标 L4。
+- 失败时输出 `L3_GENERATOR_NOT_READY` / `GENERATOR_NOT_READY`。
+- 不得自动降级 L2/L1。
+
+## 用户不提供素材，要求最高可执行版本
+
+用户：
+
+```text
+我不提供素材，你自己生成素材，做一个最高质量测试片。
+```
+
+期望行为：
+
+- 必须启用自动原创素材生成模式。
+- `auto_generation_mode` 必须是 `best_effort`。
+- 先尝试 `continuous_ai_video`。
+- 如果失败，尝试 `segmented_ai_clips`。
+- 如果失败，尝试 `static_keyframes`。
+- 最终输出 L3/L2/L1 中最高可执行等级。
+- 如果发生降级，必须写明 `auto_downgraded=true` 和最终正确命名。
+- 不得把 L1/L2 冒充 L3/L4。
+
+## 没有任何生成后端
+
+项目配置：
+
+```text
+auto_generate_assets=true
+auto_generation_mode=best_effort
+generation_backends 全部 disabled 或缺少可调用后端
+```
+
+期望行为：
+
+- 输出 `GENERATOR_NOT_READY`。
+- 说明缺少 `continuous_ai_video` / `segmented_ai_clips` / `static_keyframes` 后端。
+- 不要求用户上传素材。
+- 不承诺已制作成片。
+
+## 连续 AI video 只能生成 10 秒但音乐 19 秒
+
+项目配置：
+
+```text
+auto_generation_mode=strict_true_walkthrough
+generation_backends.continuous_ai_video.max_duration=10
+music_duration=19
+```
+
+期望行为：
+
+- 生成 8-10 秒单条连续视频。
+- 音乐裁切或自然淡出。
+- 不要求用户提供 19 秒视频。
+- 可保持 L3 真正空间漫游型命名。
+- 不得为了完整音乐长度改成多 clip 或静态图。
+
 ## API 无人值守生成模式但 API 后端不可用
 
 项目配置：

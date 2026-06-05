@@ -1,24 +1,27 @@
 {
-  "project_id": "self_generated_italian_light_luxury_walkthrough",
-  "target_video_type": "true_walkthrough",
+  "project_id": "self_generated_best_effort_italian_light_luxury",
+  "target_video_type": "highest_executable_walkthrough",
   "target_capability_level": "L3",
   "capability_level": "L3",
   "source_policy": "auto_generate",
   "auto_generate_assets": true,
-  "auto_generation_mode": "strict_true_walkthrough",
-  "allow_auto_downgrade": false,
-  "allow_downgrade": false,
+  "auto_generation_mode": "best_effort",
+  "allow_auto_downgrade": true,
+  "allow_downgrade": true,
   "platform": "douyin",
   "resolution": "1080x1920",
   "fps": 60,
-  "duration": 10,
+  "duration": 18,
   "music": "",
   "use_source_audio": false,
   "subtitle_mode": "minimal",
+  "color_grade": "low_saturation_warm_grey_preserve_dark_cabinet_weight",
   "style": "意式轻奢",
-  "output_name": "self_generated_italian_light_luxury_walkthrough",
+  "output_name": "self_generated_best_effort_italian_light_luxury",
   "auto_generation_order": [
-    "continuous_ai_video"
+    "continuous_ai_video",
+    "segmented_ai_clips",
+    "static_keyframes"
   ],
   "generation_backends": {
     "continuous_ai_video": {
@@ -34,7 +37,12 @@
     },
     "static_keyframes": {
       "enabled": true,
-      "provider": "gpt-image-2"
+      "provider": "gpt-image-2",
+      "model": "gpt-image-1.5",
+      "size": "1024x1536",
+      "quality": "high",
+      "minimum_keyframes": 4,
+      "max_keyframes": 6
     }
   },
   "style_bible": {
@@ -46,8 +54,8 @@
     "fixed_dining_table": "深色长方形餐桌，位于客餐厅中轴后段。",
     "fixed_floor_material": "暖灰高反光大板砖，反光干净但不过亮。",
     "fixed_cabinet_material": "深灰哑光柜门、暖木饰面、香槟金属细节。",
-    "fixed_light_temperature": "3000K 暖色隐藏灯带，柔和窗光，低饱和高级调色.",
-    "fixed_camera_path": "中低机位从玄关柜体边缘进入，慢横移打开客餐厅，经过餐桌和餐边柜，停在电视墙与落地窗同时成立的大景。",
+    "fixed_light_temperature": "3000K 暖色隐藏灯带，柔和窗光，低饱和高级调色。",
+    "fixed_camera_path": "中低机位从玄关柜体边缘进入，慢横移打开客餐厅；若只能生成静态关键帧，则按玄关边缘、客厅打开、电视墙主视觉、餐边柜横移、材质细节、完整大景排序。",
     "locked_visual_elements": [
       "同一电视墙",
       "同一沙发",
@@ -56,14 +64,14 @@
       "同一柜体颜色",
       "同一灯带色温"
     ],
-    "negative_prompt": "different room, different house, inconsistent TV wall, inconsistent sofa, inconsistent dining table, changing floor material, changing cabinet color, harsh light, over saturated, cartoon, text, watermark"
+    "negative_prompt": "different room, different house, inconsistent TV wall, inconsistent sofa, inconsistent dining table, changing floor material, changing cabinet color, harsh light, over saturated, cartoon, text, watermark, people"
   },
   "self_generated_asset_plan": {
     "shot_count": 6,
-    "duration": 10,
-    "music_strategy": "trim_or_fade_to_generated_video",
+    "duration": 18,
+    "music_strategy": "use_full_structure_when_L1_or_L2_trim_or_fade_when_L3",
     "opening": "entry cabinet edge with living room depth and floor reflection",
-    "main_visual": "TV wall, sofa, dining table and sideboard in one continuous open-plan room",
+    "main_visual": "TV wall, sofa, dining table and sideboard in one open-plan room",
     "ending": "quiet final wide shot of living-dining room"
   }
 }

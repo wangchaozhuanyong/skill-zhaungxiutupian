@@ -30,6 +30,22 @@
 
 如果当前会话没有视频生成工具，默认最高稳定可执行等级是 L1。不得因为缺少 FAL API 就要求用户上传 `source_video`。
 
+## 自动生成模式
+
+`strict_true_walkthrough` 用于真正空间漫游硬目标：
+
+- 触发：用户说真正空间漫游、不要图片轮播、不要分段 clip、不接受降级、必须像走进房子一样。
+- 行为：只尝试单条连续 AI video / L3 路径。
+- 成功：`source_type=continuous_ai_video`，capability level 为 L3 candidate，可称为真正空间漫游型。
+- 失败：输出 `L3_GENERATOR_NOT_READY` / `GENERATOR_NOT_READY`，不得降级 L2/L1，不得要求用户上传素材。
+
+`best_effort` 用于最高可执行测试目标：
+
+- 触发：用户说自己生成素材、做测试片、最高质量版本、尽量做出来。
+- 行为：先尝试 L3，再尝试 L2，最后尝试 L1。
+- 成功：按真实素材能力标注 L3/L2/L1。
+- 降级：必须写明 `auto_downgraded=true` 和最终正确命名。
+
 ## 可选模式：API 无人值守生成
 
 只有用户明确选择本地脚本无人值守、批量自动化或愿意配置 API key 时，才使用以下顺序：
@@ -79,12 +95,14 @@ v1.1 已内置 FAL queue provider：
 ```text
 自动素材生成模式：已启用
 生成模式：Codex 交互式生成 / API 无人值守模式
+自动生成模式：strict_true_walkthrough / best_effort
 用户是否提供素材：否
 素材来源：自动生成
 本次将自动生成的素材类型：
 可用生成后端：
 最高可执行 capability level：
 是否发生自动降级：
+是否允许自动降级：
 最终输出等级命名：
 是否需要额外 API：
 GENERATOR_NOT_READY 状态：
@@ -102,3 +120,9 @@ v1.0 不承诺从 0 稳定生成 L4。L4 仍然必须满足：
 - continuity_checks 全部通过。
 - 样片级专项评分 >= 85。
 - 有效人工空间语义复核文件通过，且 source_video_hash 匹配。
+
+## 音乐和后端能力
+
+自动生成 L3 时，单条连续视频优先于音乐完整长度。如果 continuous_ai_video 后端最大只支持 8-10 秒，就生成 8-10 秒单条连续视频，音乐裁切或淡出；不得为了完整使用 19 秒音乐而要求用户提供 19 秒视频。
+
+L2 多 clip 和 L1 静态关键帧可以按音乐完整结构设计更长时长，但仍必须让画面有足够停留时间。

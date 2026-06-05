@@ -272,13 +272,19 @@ def run_continuity_report(config_path: Path | None, project_id: str, clip_dir: P
     return report
 
 
-def write_plan(plan: Path, final: Path, preview: Path, report: Path, music: Path, clips: list[ClipSpec], duration: float, project_id: str) -> None:
+def write_plan(plan: Path, final: Path, preview: Path, report: Path, music: Path, clips: list[ClipSpec], duration: float, project_id: str, config: dict[str, Any]) -> None:
     rows = "\n".join(f"| {spec.filename} | {spec.duration:.2f}s | {spec.label} |" for spec in clips)
     plan.write_text(
         f"""# AI 分段空间漫游型成片记录
 
 本次视频类型：AI 分段空间漫游型 / segmented AI walkthrough
 本次 capability level：L2
+素材来源：{config.get('asset_origin', '用户提供 / 本地已有')}
+自动素材生成模式：{'启用' if config.get('auto_generated_assets') else '未启用'}
+自动生成模式：{config.get('auto_generation_mode', '未启用')}
+自动生成路径：{config.get('auto_generation_path', '未启用')}
+是否发生自动降级：{'是' if config.get('auto_downgraded') else '否'}
+是否允许自动降级：{'是' if config.get('allow_auto_downgrade') else '否'}
 是否单条连续视频：否
 是否多 clip 拼接：是
 是否静态图运镜：否
@@ -361,7 +367,7 @@ def main() -> int:
     make_preview(final, preview, duration, output_name)
     report = run_continuity_report(config_path, project_id, clip_dir, output_name)
     update_manifest(project_id, clip_dir, music, clips, duration)
-    write_plan(plan, final, preview, report, music, clips, duration, project_id)
+    write_plan(plan, final, preview, report, music, clips, duration, project_id, config)
     print(final)
     print(preview)
     print(report)

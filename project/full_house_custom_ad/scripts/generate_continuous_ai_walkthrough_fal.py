@@ -171,6 +171,7 @@ def main() -> int:
                 "generated_source_type": "continuous_ai_video",
                 "generated_capability_level": "L3",
                 "source_video": str(out),
+                "asset_origin": "auto_generated",
                 "provider": "fal",
                 "model": model,
                 "duration": duration,
