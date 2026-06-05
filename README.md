@@ -47,6 +47,24 @@ python scripts/render_project.py --config projects/example_l4_target_missing_ass
 
 如果只是查看 L4 缺素材报告，可以使用 `--allow-downgrade`。如果要验证系统是否会拦截 L4 过度声明，请去掉 `--allow-downgrade`，此时不满足 L4 会返回失败码。
 
+自动生成素材入口：
+
+```bash
+cd project/full_house_custom_ad
+python scripts/render_project.py --config projects/example_self_generated_walkthrough/project.json
+```
+
+这个入口用于 v1.0-final-auto-assets：当用户不提供素材、要求系统自己制作素材、自动生成素材、做测试片或从零做原创空间时，`render_project.py` 会先启用 `auto_generate_assets` 自动生成素材模式。
+
+自动生成素材模式的顺序是：
+
+- `continuous_ai_video` 可用：生成单条连续 AI video，进入 L3 candidate，再走真正空间漫游后期；不自动保证 L4。
+- `segmented_ai_clips` 可用：生成多个 AI video clip，进入 L2 AI 分段空间漫游；不得叫 L3/L4。
+- `static_keyframes` / `gpt-image-2` 可用：生成静态关键帧，进入 L1 样片风格伪漫游；不得叫 true walkthrough。
+- 所有生成后端不可用：输出 `GENERATOR_NOT_READY`，生成 auto assets report，不会第一轮要求用户上传 `source_video`。
+
+如果本地不能直接调用 gpt-image-2，脚本只会写出 `prompt_pack.md` 和 `STATIC_IMAGE_GENERATION_PENDING`，不会伪造图片或假装已经生成成片。
+
 连续视频后期模板：
 
 ```bash
@@ -86,7 +104,9 @@ L4 最终通过不能只改 `project.json`。必须保留 `output/<project>_sema
 - 单条真实连续视频、专业 3D 漫游导出或单条 AI 连续视频：走 `render_continuous_video_project.py`
 - 多个独立 AI video clip：走 `assemble_segmented_ai_walkthrough_clips.py`
 - 静态图关键帧：走 `render_static_image_project.py`，只允许标注 L1 伪漫游/图片展示，不得冒充真正 walkthrough
-- 没有素材：只输出报告并停止
+- 没有素材且 `auto_generate_assets=true` 或 `source_policy=auto_generate`：先走 `generate_auto_project_assets.py`，自动尝试 L3 -> L2 -> L1 最高可执行版本
+- 没有素材且所有生成后端不可用：输出 `GENERATOR_NOT_READY`
+- 没有素材且没有开启自动生成：只输出报告并停止
 
 仓库不提交以下内容：
 
@@ -144,6 +164,21 @@ FAL_KEY=your_real_fal_key
 project/full_house_custom_ad/plugins/video_gen/fal.py
 ```
 
+## v1.0 完整性检查
+
+最终收口后可以运行：
+
+```bash
+cd project/full_house_custom_ad
+python scripts/check_v1_integrity.py
+```
+
+通过时会输出：
+
+```text
+V1 final auto-assets integrity check passed.
+```
+
 ## 备注
 
-真正空间漫游需要真实连续视频、AI 连续视频或专业 3D 漫游素材。样片级连续空间漫游还必须通过连续性检查、样片级专项评分和人工空间语义复核文件校验。validator 的抽帧和帧差只提供基础视觉证据，不能自动证明电视墙、沙发、材质、灯光和空间比例语义一致。缺少连续素材时，skill 可以继续执行高质量降级方案，但必须清楚标注为图片展示、样片风格伪漫游或 AI 分段空间漫游，不能冒充同款样片级 walkthrough。
+真正空间漫游需要真实连续视频、AI 连续视频或专业 3D 漫游素材。v1.0 可以在用户不提供素材时自动尝试生成 L3/L2/L1 中最高可执行版本，但不承诺从 0 稳定生成 L4。样片级连续空间漫游还必须通过连续性检查、样片级专项评分和人工空间语义复核文件校验。validator 的抽帧和帧差只提供基础视觉证据，不能自动证明电视墙、沙发、材质、灯光和空间比例语义一致。缺少连续素材时，skill 可以继续执行高质量降级方案，但必须清楚标注为图片展示、样片风格伪漫游或 AI 分段空间漫游，不能冒充同款样片级 walkthrough。

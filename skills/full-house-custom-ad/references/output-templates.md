@@ -12,7 +12,14 @@
 本次画面关键词：
 本次核心卖点：
 本次原创设计点：
+自动素材生成模式：
+用户是否提供素材：
+素材来源：
+本次将自动生成的素材类型：
+可用生成后端：
 本次 capability level：
+最高可执行 capability level：
+是否发生自动降级：
 本次样片级连续漫游判断：
 本次目标客户：
 本次客户心理按钮：
@@ -22,6 +29,8 @@
 L4 是否通过：
 不通过的原因：
 降级后的正确命名：
+GENERATOR_NOT_READY 状态：
+如果不能自动生成，原因：
 
 1. 客户心理判断
 - 目标客户是谁
@@ -60,6 +69,10 @@ L4 是否通过：
 
 5. 视频类型判断
 - 为什么选择这个类型
+- 是否启用自动原创素材生成模式
+- 用户是否提供素材；如果没有，是否按 continuous_ai_video -> segmented_ai_clips -> static_keyframes 自动尝试
+- 可用生成后端是什么
+- 如果所有生成后端不可用，是否输出 GENERATOR_NOT_READY，而不是要求上传 source_video
 - 是否是样片级连续空间漫游、真正漫游、AI 分段空间漫游、伪漫游，还是图片展示
 - 本次 capability level 是 L0/L1/L2/L3/L4 中哪一级
 - 是否单条连续视频
@@ -171,6 +184,9 @@ L4 是否通过：
 样片级连续漫游约束：
 如果本次目标是样片级连续空间漫游，必须达到 L4。真实连续视频、专业 3D 漫游导出或单条连续 AI video 才可能达到 L3/L4；若只有静态图，只能执行 L1“样片风格伪漫游”；若是多个独立 AI clip 拼接，默认只能执行 L2“AI 分段空间漫游”。L1/L2 不得称为真正 walkthrough 或同款样片级漫游。
 
+自动原创素材生成约束：
+如果用户明确不提供素材或要求系统自己制作素材，必须先启用自动生成素材模式。生成顺序为 continuous_ai_video -> segmented_ai_clips -> static_keyframes。continuous_ai_video 成功只能标 L3 candidate；segmented_ai_clips 成功只能标 L2；static_keyframes 成功只能标 L1；全部不可用必须输出 GENERATOR_NOT_READY。自动生成模式不得第一轮要求用户上传 source_video，也不得伪造 gpt-image-2 或 AI video 已生成成功。
+
 连续性报告：
 必须输出或引用 continuity_report.md，说明是否单条连续视频、是否多 clip 拼接、是否静态图运镜、素材就绪状态、是否通过连续性检查、是否允许称为真正 walkthrough、是否允许称为样片级连续空间漫游。样片级目标必须同时输出 keyframe_sheet、max_delta_pair_sheet、sampled_frame_count、scene_change_count、avg_frame_delta、max_frame_delta、max_delta_from_frame、max_delta_to_frame、hard_cut_risk、motion_continuity_risk、visual_evidence_available、manual_review_required、semantic_review_required、semantic_review_file、semantic_review_file_exists、semantic_review_file_valid、semantic_review_reviewer、semantic_review_date、semantic_review_conclusion、semantic_review_source_hash、semantic_review_expected_source_hash、sample_level_score、sample_level_score_passed、sample_level_score_severe、semantic_review_errors 和 l4_gate_result。`manual_semantic_review_passed=true` 只能作为兼容字段，不得单独通过 L4。
 
@@ -207,6 +223,10 @@ L4 是否通过：
 - 是否确定音乐并分析完整结构。
 - 是否根据音乐完整结构设计视频时长，而不是锁死固定秒数。
 - 是否有原创导演概念和本次原创设计点。
+- 用户不提供素材时，是否进入自动原创素材生成模式。
+- 自动原创素材生成模式是否按 L3 -> L2 -> L1 尝试最高可执行版本。
+- 所有生成后端不可用时，是否输出 GENERATOR_NOT_READY，而不是要求上传 source_video。
+- 是否没有伪造 gpt-image-2 图片或 AI video 生成结果。
 - 空间大景是否至少停留到规则下限。
 - 客户是否能看清楚柜体、材质、灯光和布局。
 - 音乐是否服务空间，而不是压过空间。

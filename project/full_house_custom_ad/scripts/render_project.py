@@ -11,6 +11,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 VALIDATOR = ROOT / "scripts" / "validate_walkthrough_continuity.py"
+AUTO_ASSET_GENERATOR = ROOT / "scripts" / "generate_auto_project_assets.py"
 SEGMENTED_ASSEMBLER = ROOT / "scripts" / "assemble_segmented_ai_walkthrough_clips.py"
 CONTINUOUS_RENDERER = ROOT / "scripts" / "render_continuous_video_project.py"
 STATIC_RENDERER = ROOT / "scripts" / "render_static_image_project.py"
@@ -70,6 +71,15 @@ def has_any_renderable_source(config: dict[str, Any]) -> bool:
     return has_continuous_video(config) or has_segmented_clips(config) or has_static_images(config)
 
 
+def auto_generation_enabled(config: dict[str, Any]) -> bool:
+    return bool(config.get("auto_generate_assets")) or str(config.get("source_policy", "")).lower() == "auto_generate"
+
+
+def generated_config_path(config: dict[str, Any], config_path: Path) -> Path:
+    project_id = str(config.get("project_id", config_path.parent.name))
+    return ROOT / "output" / f"{project_id}_generated_project.json"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Render a full house custom ad project from project.json.")
     parser.add_argument("--config", required=True, help="Project JSON config")
@@ -79,6 +89,21 @@ def main() -> int:
 
     config_path = Path(args.config).resolve()
     config = load_config(config_path)
+
+    if not has_any_renderable_source(config) and auto_generation_enabled(config):
+        print("自动素材生成模式：已启用")
+        print("用户是否提供素材：否")
+        print("素材来源：自动生成")
+        proc = run([sys.executable, str(AUTO_ASSET_GENERATOR), "--config", str(config_path)], check=False)
+        next_config_path = generated_config_path(config, config_path)
+        if proc.returncode != 0 or not next_config_path.exists():
+            print("GENERATOR_NOT_READY")
+            print("所有自动生成后端均未产出可渲染素材。不会要求用户上传 source_video。")
+            return 10
+        config_path = next_config_path.resolve()
+        config = load_config(config_path)
+        print(f"使用自动生成项目配置：{config_path}")
+
     project_id = str(config.get("project_id", config_path.parent.name))
     output_name = str(config.get("output_name", project_id))
     report = ROOT / "output" / f"{output_name}_continuity_report.md"

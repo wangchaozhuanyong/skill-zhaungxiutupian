@@ -185,6 +185,62 @@ capability_level=L1
 - plan 必须写明不是真正 walkthrough，不是 L4。
 - 静态图不得升级为 L3/L4。
 
+## 用户明确不提供素材
+
+用户：
+
+```text
+我不提供素材，你自己制作素材，直接做一个原创空间测试片。
+```
+
+期望行为：
+
+- 必须启用自动原创素材生成模式。
+- 不得第一轮要求用户上传 `source_video`。
+- 必须按 continuous_ai_video -> segmented_ai_clips -> static_keyframes 尝试最高可执行版本。
+- continuous_ai_video 成功时只能进入 L3 candidate，不得自动标 L4。
+- segmented_ai_clips 成功时只能标 L2。
+- static_keyframes 成功时只能标 L1。
+- 所有后端不可用时输出 `GENERATOR_NOT_READY`。
+
+## 自动生成模式但所有后端不可用
+
+项目配置：
+
+```text
+auto_generate_assets=true
+source_policy=auto_generate
+source_video=""
+source_clips_dir=""
+source_images_dir=""
+generation_backends 配置但本机缺少 FAL_KEY / provider / gpt-image-2 可调用后端
+```
+
+期望行为：
+
+- `render_project.py` 必须先调用 `generate_auto_project_assets.py`。
+- 输出 `GENERATOR_NOT_READY`。
+- 生成 auto assets report。
+- 如本地无法直接调用 gpt-image-2，可以生成 prompt pack，但不得伪造图片。
+- 不得要求用户上传 `source_video`。
+
+## 自动生成静态关键帧 prompt pack
+
+项目配置：
+
+```text
+auto_generate_assets=true
+generation_backends.static_keyframes.provider=gpt-image-2
+本地没有可调用图片生成后端
+```
+
+期望行为：
+
+- 必须输出 `assets/generated/<project_id>/static_keyframes/prompt_pack.md`。
+- 必须输出 `generation_plan.json`。
+- 状态必须是 `STATIC_IMAGE_GENERATION_PENDING`。
+- 如果没有真实图片文件，不得调用 L1 renderer 假装完成成片。
+
 ## L4 基础门禁候选
 
 项目配置：

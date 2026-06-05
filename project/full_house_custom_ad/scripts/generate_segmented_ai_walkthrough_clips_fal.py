@@ -124,6 +124,11 @@ def resolve_path(value: str | None) -> Path | None:
     return path if path.is_absolute() else ROOT / path
 
 
+def write_generation_result(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
 def style_bible_from_config(config: dict[str, Any]) -> dict[str, Any]:
     bible = dict(DEFAULT_STYLE_BIBLE)
     incoming = config.get("style_bible")
@@ -224,13 +229,34 @@ def main() -> int:
 
     config_path = Path(args.config).resolve() if args.config else None
     config = load_config(config_path)
-    out_dir = resolve_path(args.clips_dir) or resolve_path(config.get("source_clips_dir")) or DEFAULT_CLIP_DIR
+    project_id = str(config.get("project_id", config_path.parent.name if config_path else "segmented_ai_walkthrough"))
+    backend = (config.get("generation_backends") or {}).get("segmented_ai_clips", {})
+    model = str(backend.get("model") or args.model)
+    out_dir = (
+        resolve_path(args.clips_dir)
+        or resolve_path(config.get("source_clips_dir"))
+        or (ROOT / "assets" / "generated" / project_id / "segmented_ai_clips" if config_path else DEFAULT_CLIP_DIR)
+    )
     assert out_dir is not None
+    result_path = out_dir / "generation_result.json"
 
     load_dotenv(ROOT / ".env")
     load_dotenv(REPO / ".env")
     load_dotenv(Path.home() / ".hermes" / ".env")
     if not os.environ.get("FAL_KEY", "").strip() or os.environ["FAL_KEY"].strip() == "your_fal_api_key_here":
+        write_generation_result(
+            result_path,
+            {
+                "status": "GENERATOR_NOT_READY",
+                "generated_source_type": "segmented_ai_clips",
+                "generated_capability_level": "L2",
+                "source_clips_dir": str(out_dir),
+                "clip_count": 0,
+                "provider": "fal",
+                "model": model,
+                "error": "FAL_KEY is not configured.",
+            },
+        )
         print("FAL_KEY is not configured.")
         print("Add it to one of these files:")
         print(f"- {ROOT / '.env'}")
@@ -243,6 +269,20 @@ def main() -> int:
     try:
         from plugins.video_gen.fal import FALVideoGenProvider
     except Exception as exc:
+        write_generation_result(
+            result_path,
+            {
+                "status": "GENERATOR_NOT_READY",
+                "generated_source_type": "segmented_ai_clips",
+                "generated_capability_level": "L2",
+                "source_clips_dir": str(out_dir),
+                "clip_count": 0,
+                "provider": "fal",
+                "model": model,
+                "provider_path": str(PROVIDER_PATH),
+                "error": f"Cannot import FALVideoGenProvider: {exc}",
+            },
+        )
         print("Cannot import FALVideoGenProvider.")
         print("This repository does not include the video generation provider implementation.")
         print(f"Install or add the provider at {PROVIDER_PATH}, then run this script again.")
@@ -251,8 +291,41 @@ def main() -> int:
 
     provider = FALVideoGenProvider()
     style_bible = style_bible_from_config(config)
-    for clip in clips_from_config(config):
-        generate_clip(provider, clip, style_bible, args.model, args.resolution, out_dir)
+    try:
+        for clip in clips_from_config(config):
+            generate_clip(provider, clip, style_bible, model, args.resolution, out_dir)
+    except Exception as exc:
+        clip_count = len([p for p in out_dir.glob("*") if p.is_file() and p.suffix.lower() in {".mp4", ".mov", ".m4v", ".webm"}])
+        write_generation_result(
+            result_path,
+            {
+                "status": "GENERATION_FAILED",
+                "generated_source_type": "segmented_ai_clips",
+                "generated_capability_level": "L2",
+                "source_clips_dir": str(out_dir),
+                "clip_count": clip_count,
+                "provider": "fal",
+                "model": model,
+                "error": str(exc),
+            },
+        )
+        print(f"GENERATION_FAILED: {exc}")
+        return 4
+
+    clip_count = len([p for p in out_dir.glob("*") if p.is_file() and p.suffix.lower() in {".mp4", ".mov", ".m4v", ".webm"}])
+    write_generation_result(
+        result_path,
+        {
+            "status": "READY" if clip_count >= 2 else "L2_NOT_READY",
+            "generated_source_type": "segmented_ai_clips",
+            "generated_capability_level": "L2",
+            "source_clips_dir": str(out_dir),
+            "clip_count": clip_count,
+            "provider": "fal",
+            "model": model,
+            "note": "多个独立 AI clip 只能标注为 L2 AI 分段空间漫游，不得默认称为 L3/L4。",
+        },
+    )
 
     if not args.no_assemble:
         cmd = [sys.executable, str(ASSEMBLER)]
