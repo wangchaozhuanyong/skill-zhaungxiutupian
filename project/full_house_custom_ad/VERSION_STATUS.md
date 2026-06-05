@@ -2,6 +2,8 @@
 
 当前版本：v1.0-final-auto-assets
 
+当前增量：v1.1-l1-auto-render
+
 ## 已完成能力
 
 - L1：静态图 / gpt-image-2 关键帧 / 图片素材，可以制作样片风格伪漫游或高级图片展示。
@@ -55,3 +57,15 @@ v1.0 完成后，除非出现以下问题，否则不再继续修改 v1.0：
 - 核心依赖缺失导致脚本无法启动。
 
 其他优化进入 v1.1。
+
+## v1.1 L1 增量
+
+v1.1 第一阶段只打通 L1 自动出片链路：
+
+1. `generate_gpt_image_keyframes.py` 使用 OpenAI Image API 生成静态关键帧；
+2. `generate_auto_project_assets.py` 在 `static_keyframes` 阶段优先调用真实图片生成脚本；
+3. 图片生成成功后写入 `source_type=static_images`、`capability_level=L1` 和 `source_images_dir`；
+4. `render_project.py` 继续调用 `render_static_image_project.py` 输出 L1 样片风格伪漫游 MP4；
+5. 若未配置 `OPENAI_API_KEY` 或图片生成失败，只输出 `GENERATOR_NOT_READY` / prompt pack，不伪造图片。
+
+v1.1 L1 不改变 L4 门禁，不把静态关键帧视频称为真正 walkthrough。

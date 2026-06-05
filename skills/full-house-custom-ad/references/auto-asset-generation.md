@@ -20,7 +20,7 @@
 
 1. `continuous_ai_video` 可用：生成单条连续 AI video，`source_type=continuous_ai_video`，最高进入 L3 候选。
 2. `segmented_ai_clips` 可用：生成多个独立 AI video clip，`source_type=segmented_ai_clips`，只能标 L2。
-3. `static_keyframes` / `gpt-image-2` 可用：生成静态关键帧，`source_type=static_images`，只能标 L1。
+3. `static_keyframes` / OpenAI Image API 可用：调用 `generate_gpt_image_keyframes.py` 生成静态关键帧，`source_type=static_images`，只能标 L1。
 4. 所有生成后端不可用：输出 `GENERATOR_NOT_READY`。
 
 ## 禁止行为
@@ -29,7 +29,22 @@
 - 禁止把 L1 静态关键帧运镜称为真正 walkthrough。
 - 禁止把 L2 多段 AI clip 拼接称为真正空间漫游或样片级一镜到底。
 - 禁止把 L3 自动称为 L4。
-- 禁止伪造 gpt-image-2 已经生成图片；若本地不能直接生成图片，只能输出 prompt pack 和 `STATIC_IMAGE_GENERATION_PENDING`。
+- 禁止伪造 OpenAI Image API 已经生成图片；若本地不能直接生成图片，只能输出 prompt pack 和 `STATIC_IMAGE_GENERATION_PENDING` / `GENERATOR_NOT_READY`。
+
+## v1.1 L1 自动出片
+
+v1.1 第一阶段优先打通 L1：
+
+```text
+project.json
+-> generate_auto_project_assets.py
+-> generate_gpt_image_keyframes.py
+-> OpenAI Image API 生成静态关键帧
+-> render_static_image_project.py
+-> 输出 L1 样片风格伪漫游 MP4
+```
+
+如果没有 `OPENAI_API_KEY`，必须保留 prompt pack 并输出 `GENERATOR_NOT_READY`，不得假装已生成图片。图片生成成功后，成片仍然只能命名为 L1 样片风格伪漫游。
 
 ## 正确输出
 

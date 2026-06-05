@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OUT_DIR = ROOT / "output"
 CONTINUOUS_GENERATOR = ROOT / "scripts" / "generate_continuous_ai_walkthrough_fal.py"
 SEGMENTED_GENERATOR = ROOT / "scripts" / "generate_segmented_ai_walkthrough_clips_fal.py"
+STATIC_IMAGE_GENERATOR = ROOT / "scripts" / "generate_gpt_image_keyframes.py"
 STATIC_PROMPT_PACK = ROOT / "scripts" / "write_static_keyframe_prompt_pack.py"
 VIDEO_EXTS = {".mp4", ".mov", ".m4v", ".webm"}
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp"}
@@ -200,9 +201,9 @@ def main() -> int:
                 return 0
 
         elif step == "static_keyframes":
-            proc = run([sys.executable, str(STATIC_PROMPT_PACK), "--config", str(config_path)])
+            proc = run([sys.executable, str(STATIC_IMAGE_GENERATOR), "--config", str(config_path)])
             keyframe_dir = static_keyframe_dir(project_id)
-            plan = read_json(keyframe_dir / "generation_plan.json")
+            result = read_json(keyframe_dir / "generation_result.json")
             images = collect_files(keyframe_dir, IMAGE_EXTS)
             attempts.append(
                 {
@@ -212,7 +213,7 @@ def main() -> int:
                     "source_images_dir": str(keyframe_dir),
                     "image_count": len(images),
                     "prompt_pack": str(keyframe_dir / "prompt_pack.md"),
-                    **plan,
+                    **result,
                 }
             )
             if images:
@@ -226,10 +227,14 @@ def main() -> int:
                         "target_capability_level": "L1",
                         "auto_generation_status": "READY",
                         "auto_generation_backend": step,
+                        "shots": result.get("shots", []),
                     },
                 )
                 print(generated_project)
                 return 0
+
+            if proc.returncode != 0 and not (keyframe_dir / "prompt_pack.md").exists():
+                run([sys.executable, str(STATIC_PROMPT_PACK), "--config", str(config_path)])
 
         else:
             attempts.append({"backend": step, "status": "SKIPPED", "reason": "unknown backend"})

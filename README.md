@@ -65,6 +65,40 @@ python scripts/render_project.py --config projects/example_self_generated_walkth
 
 如果本地不能直接调用 gpt-image-2，脚本只会写出 `prompt_pack.md` 和 `STATIC_IMAGE_GENERATION_PENDING`，不会伪造图片或假装已经生成成片。
 
+v1.1 L1 自动图片成片入口：
+
+```bash
+cd project/full_house_custom_ad
+python scripts/render_project.py --config projects/example_self_generated_l1/project.json
+```
+
+这个入口只测试最稳定的 L1 链路：
+
+```text
+project.json
+-> generate_auto_project_assets.py
+-> generate_gpt_image_keyframes.py
+-> OpenAI Image API 生成静态关键帧
+-> render_static_image_project.py
+-> 输出 L1 样片风格伪漫游 MP4
+```
+
+如需真实生成图片，请在以下任一文件配置：
+
+```text
+project/full_house_custom_ad/.env
+project/.env
+~/.hermes/.env
+```
+
+格式：
+
+```text
+OPENAI_API_KEY=your_real_openai_api_key
+```
+
+`generate_gpt_image_keyframes.py` 默认使用项目配置里的图片模型，例如 `gpt-image-1.5`。如果本机没有 `OPENAI_API_KEY`，它会输出 `GENERATOR_NOT_READY`，同时保留 `prompt_pack.md`，不会伪造图片。生成出的图片最高只进入 L1 样片风格伪漫游，不得称为真正 walkthrough 或 L4。
+
 连续视频后期模板：
 
 ```bash
@@ -177,6 +211,19 @@ python scripts/check_v1_integrity.py
 
 ```text
 V1 final auto-assets integrity check passed.
+```
+
+v1.1 L1 链路检查：
+
+```bash
+cd project/full_house_custom_ad
+python scripts/check_v1_1_l1_integrity.py
+```
+
+通过时会输出：
+
+```text
+V1.1 L1 integrity check passed.
 ```
 
 ## 备注

@@ -1,0 +1,63 @@
+{
+  "project_id": "self_generated_l1_italian_light_luxury",
+  "target_video_type": "pseudo_walkthrough",
+  "target_capability_level": "L1",
+  "capability_level": "L1",
+  "source_policy": "auto_generate",
+  "auto_generate_assets": true,
+  "allow_auto_downgrade": true,
+  "allow_downgrade": true,
+  "platform": "douyin",
+  "resolution": "1080x1920",
+  "fps": 60,
+  "duration": 18,
+  "per_image_duration": 3.6,
+  "music": "",
+  "use_source_audio": false,
+  "subtitle_mode": "minimal",
+  "style": "意式轻奢",
+  "output_name": "self_generated_l1_italian_light_luxury",
+  "auto_generation_order": [
+    "static_keyframes"
+  ],
+  "generation_backends": {
+    "continuous_ai_video": {
+      "enabled": false
+    },
+    "segmented_ai_clips": {
+      "enabled": false
+    },
+    "static_keyframes": {
+      "enabled": true,
+      "provider": "openai_images",
+      "model": "gpt-image-1.5",
+      "size": "1024x1536",
+      "quality": "high",
+      "background": "opaque",
+      "output_format": "png",
+      "minimum_keyframes": 4,
+      "max_keyframes": 6
+    }
+  },
+  "style_bible": {
+    "project_theme": "145㎡意式轻奢大横厅",
+    "floor_plan_assumption": "玄关进入客餐厅一体大横厅，电视墙、沙发、餐桌、餐边柜和落地窗在同一空间内连续成立。",
+    "fixed_furniture_layout": "电视墙在长边，沙发正对电视墙，餐桌位于沙发后方，餐边柜靠近餐区，落地窗位于客厅侧。",
+    "fixed_tv_wall": "暖灰岩板电视墙，深灰门墙柜一体柜体，隐藏灯带。",
+    "fixed_sofa": "低矮暖灰色直排沙发，与电视墙平行。",
+    "fixed_dining_table": "深色长方形餐桌，位于客餐厅中轴后段。",
+    "fixed_floor_material": "暖灰高反光大板砖，反光干净但不过亮。",
+    "fixed_cabinet_material": "深灰哑光柜门、暖木饰面、香槟金属细节。",
+    "fixed_light_temperature": "3000K 暖色隐藏灯带，柔和窗光，低饱和高级调色。",
+    "fixed_camera_path": "静态关键帧按玄关边缘、客厅打开、电视墙主视觉、餐边柜横移、材质细节、完整大景排序。",
+    "locked_visual_elements": [
+      "同一电视墙",
+      "同一沙发",
+      "同一餐桌",
+      "同一地面反光",
+      "同一柜体颜色",
+      "同一灯带色温"
+    ],
+    "negative_prompt": "different room, different house, inconsistent TV wall, inconsistent sofa, inconsistent dining table, changing floor material, changing cabinet color, harsh light, over saturated, cartoon, text, watermark, people"
+  }
+}
