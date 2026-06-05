@@ -12,6 +12,7 @@
   "use_source_audio": false,
   "duration": 0,
   "per_image_duration": 4.2,
+  "motion_renderer": "stable",
   "transition_type": "auto",
   "transition_duration": 0.52,
   "subtitle_mode": "minimal",

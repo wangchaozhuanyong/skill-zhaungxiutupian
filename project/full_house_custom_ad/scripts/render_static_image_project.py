@@ -199,7 +199,77 @@ def motion_profile(shot_type: str, motion: str, index: int) -> tuple[float, floa
     return (0.052, 0.55, 0.24, 0.38, 0.28, "默认反向横移")
 
 
-def render_image_clip(
+def smoothstep(value: float) -> float:
+    value = min(1.0, max(0.0, value))
+    return value * value * (3.0 - 2.0 * value)
+
+
+def encode_raw_rgb_frames(
+    dst: Path,
+    *,
+    width: int,
+    height: int,
+    fps: int,
+    frames: int,
+    frame_iter: Any,
+) -> None:
+    cmd = [
+        ffmpeg_exe(),
+        "-y",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-f",
+        "rawvideo",
+        "-pix_fmt",
+        "rgb24",
+        "-s",
+        f"{width}x{height}",
+        "-r",
+        str(fps),
+        "-i",
+        "-",
+        "-frames:v",
+        str(frames),
+        "-an",
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        "-profile:v",
+        "high",
+        "-level",
+        "4.2",
+        "-preset",
+        "veryfast",
+        "-crf",
+        "18",
+        "-movflags",
+        "+faststart",
+        str(dst),
+    ]
+    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    assert proc.stdin is not None
+    try:
+        for frame in frame_iter:
+            proc.stdin.write(frame)
+        proc.stdin.close()
+        stdout = proc.stdout.read().decode("utf-8", errors="replace") if proc.stdout else ""
+        stderr = proc.stderr.read().decode("utf-8", errors="replace") if proc.stderr else ""
+        returncode = proc.wait()
+    except BrokenPipeError as exc:
+        proc.kill()
+        stderr = proc.stderr.read().decode("utf-8", errors="replace") if proc.stderr else ""
+        raise RuntimeError(stderr or str(exc)) from exc
+    if stdout:
+        print(stdout, end="")
+    if stderr:
+        print(stderr, end="", file=sys.stderr)
+    if returncode != 0:
+        raise RuntimeError(stderr or f"ffmpeg raw frame encode failed: {returncode}")
+
+
+def render_image_clip_stable(
     item: dict[str, Any],
     dst: Path,
     width: int,
@@ -209,6 +279,106 @@ def render_image_clip(
     *,
     fade_to_black: bool = False,
 ) -> str:
+    try:
+        from PIL import Image, ImageEnhance
+    except Exception as exc:
+        raise RuntimeError("Pillow is required for stable anti-jitter motion rendering") from exc
+
+    src = Path(item["path"])
+    duration = float(item["computed_duration"])
+    frames = max(1, int(round(duration * fps)))
+    zoom_amount, start_x, end_x, start_y, end_y, description = motion_profile(
+        str(item.get("shot_type", "")), str(item.get("motion", "")), index
+    )
+
+    with Image.open(src) as opened:
+        source = opened.convert("RGB")
+
+    source = ImageEnhance.Contrast(source).enhance(1.055)
+    source = ImageEnhance.Color(source).enhance(0.88)
+    source = ImageEnhance.Brightness(source).enhance(0.996)
+
+    src_w, src_h = source.size
+    target_aspect = width / height
+    source_aspect = src_w / src_h
+    if source_aspect > target_aspect:
+        base_h = float(src_h)
+        base_w = base_h * target_aspect
+        base_left = (src_w - base_w) / 2.0
+        base_top = 0.0
+    else:
+        base_w = float(src_w)
+        base_h = base_w / target_aspect
+        base_left = 0.0
+        base_top = (src_h - base_h) / 2.0
+
+    resample = Image.Resampling.BICUBIC
+    black = None
+
+    def frames_iter() -> Any:
+        nonlocal black
+        for frame_index in range(frames):
+            t = frame_index / max(1, frames - 1)
+            eased = smoothstep(t)
+            zoom = 1.0 + zoom_amount * eased
+            pos_x = start_x + (end_x - start_x) * eased
+            pos_y = start_y + (end_y - start_y) * eased
+            crop_w = base_w / zoom
+            crop_h = base_h / zoom
+            left = base_left + (base_w - crop_w) * pos_x
+            top = base_top + (base_h - crop_h) * pos_y
+            left = min(max(left, 0.0), max(0.0, src_w - crop_w))
+            top = min(max(top, 0.0), max(0.0, src_h - crop_h))
+            frame = source.transform(
+                (width, height),
+                Image.Transform.EXTENT,
+                (left, top, left + crop_w, top + crop_h),
+                resample=resample,
+            )
+            frame = ImageEnhance.Sharpness(frame).enhance(1.08)
+            if fade_to_black:
+                seconds = frame_index / fps
+                fade_alpha = 0.0
+                if seconds < 0.18:
+                    fade_alpha = 1.0 - seconds / 0.18
+                elif seconds > duration - 0.25:
+                    fade_alpha = min(1.0, (seconds - (duration - 0.25)) / 0.25)
+                if fade_alpha > 0:
+                    if black is None:
+                        black = Image.new("RGB", (width, height), (0, 0, 0))
+                    frame = Image.blend(frame, black, fade_alpha)
+            yield frame.tobytes()
+
+    encode_raw_rgb_frames(dst, width=width, height=height, fps=fps, frames=frames, frame_iter=frames_iter())
+    item["motion_description"] = f"{description}（稳定抗抖）"
+    return item["motion_description"]
+
+
+def render_image_clip(
+    item: dict[str, Any],
+    dst: Path,
+    width: int,
+    height: int,
+    fps: int,
+    index: int,
+    *,
+    fade_to_black: bool = False,
+    motion_renderer: str = "stable",
+) -> str:
+    if motion_renderer in {"stable", "anti_jitter", "pillow"}:
+        try:
+            return render_image_clip_stable(
+                item,
+                dst,
+                width,
+                height,
+                fps,
+                index,
+                fade_to_black=fade_to_black,
+            )
+        except Exception as exc:
+            print(f"stable motion renderer failed, falling back to ffmpeg zoompan: {exc}", file=sys.stderr)
+
     src = Path(item["path"])
     duration = float(item["computed_duration"])
     frames = max(1, int(round(duration * fps)))
@@ -733,6 +903,7 @@ def write_plan(
     transition_duration: float,
     transition_type: str,
     transitions: list[dict[str, str]],
+    motion_renderer: str,
     caption_count: int,
     subtitle_file: Path | None,
 ) -> None:
@@ -778,6 +949,7 @@ def write_plan(
 - 总时长：{duration:.2f} 秒
 - 单图时长：{per_image_duration:.2f} 秒
 - 运镜：慢推、轻微横移、中心构图收束，模拟看房氛围但不冒充真实 walkthrough。
+- 运镜渲染：{motion_renderer}；默认使用稳定抗抖渲染，减少慢推时的像素取整微抖。
 - 转场模式：{transition_type}，单次约 {transition_duration:.2f} 秒；按镜头语义做柔和衔接，避免图片之间生硬硬切。
 - 调色：克制通透的高级样板间调色，低饱和暖灰，保留深色柜体重量感和暗部层次。
 - 字幕：{'启用' if caption_count else '未启用'}；少字高级文案，避免遮挡空间价值。
@@ -838,6 +1010,7 @@ def main() -> int:
     width, height = parse_resolution(str(config.get("resolution", "1080x1920")))
     fps = int(config.get("fps", 60))
     fade_to_black = bool(config.get("fade_to_black", False))
+    motion_renderer = str(config.get("motion_renderer", "stable")).strip().lower() or "stable"
     transition_duration = float(config.get("transition_duration", 0.42) or 0.0)
     transition_type = str(config.get("transition_type", "auto")).strip().lower() or "auto"
     per_image_duration, duration = apply_transition_padding(items, duration, transition_duration)
@@ -858,7 +1031,16 @@ def main() -> int:
             f"({item.get('shot_type', '')})",
             flush=True,
         )
-        render_image_clip(item, clip, width, height, fps, index, fade_to_black=fade_to_black)
+        render_image_clip(
+            item,
+            clip,
+            width,
+            height,
+            fps,
+            index,
+            fade_to_black=fade_to_black,
+            motion_renderer=motion_renderer,
+        )
         tmp_clips.append(clip)
 
     video_only = OUT_DIR / f"{output_name}_video_only.mp4"
@@ -900,6 +1082,7 @@ def main() -> int:
         transition_duration=transition_duration,
         transition_type=transition_type,
         transitions=transitions,
+        motion_renderer=motion_renderer,
         caption_count=len(captions),
         subtitle_file=subtitle_file,
     )

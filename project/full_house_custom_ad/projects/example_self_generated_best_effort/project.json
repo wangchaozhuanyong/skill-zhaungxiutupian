@@ -12,6 +12,7 @@
   "resolution": "1080x1920",
   "fps": 60,
   "duration": 18,
+  "motion_renderer": "stable",
   "transition_type": "auto",
   "transition_duration": 0.52,
   "music": "",

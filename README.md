@@ -119,7 +119,7 @@ python scripts/render_project.py --config projects/example_self_generated_walkth
 
 如果本地不能直接调用 gpt-image-2，脚本只会写出 `prompt_pack.md` 和 `STATIC_IMAGE_GENERATION_PENDING`，不会伪造图片或假装已经生成成片。
 
-L1 静态图伪漫游 renderer 支持 `transition_type=auto`、`subtitle_mode=minimal`、`auto_captions=true` 和 `captions`。默认会按镜头语义选择柔和转场：入口到大景用顺动横移，主视觉用克制叠化，细节用轻柔模糊，收尾用慢溶解。文案应该按镜头设计，少字、低压迫感、突出空间价值；如果没有手写 `captions`，脚本会按镜头类型自动生成基础文案，并生成 `.ass` 字幕文件烧录到最终 MP4。
+L1 静态图伪漫游 renderer 支持 `motion_renderer=stable`、`transition_type=auto`、`subtitle_mode=minimal`、`auto_captions=true` 和 `captions`。默认会用稳定抗抖运镜减少慢推时的像素取整微抖；再按镜头语义选择柔和转场：入口到大景用顺动横移，主视觉用克制叠化，细节用柔和叠化保留材质清晰度，收尾用慢溶解。文案应该按镜头设计，少字、低压迫感、突出空间价值；如果没有手写 `captions`，脚本会按镜头类型自动生成基础文案，并生成 `.ass` 字幕文件烧录到最终 MP4。
 
 v1.1 L1 自动图片成片入口：
 
