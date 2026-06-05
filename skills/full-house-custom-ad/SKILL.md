@@ -126,9 +126,13 @@ Luxury modern custom home interior, premium built-in cabinets...
 本次目标客户：
 本次前 5 秒钩子：
 本次质量评分：
+样片级专项评分：
+L4 是否通过：
+不通过的原因：
+降级后的正确命名：
 ```
 
-客户心理规则见 `references/customer-psychology.md`。前 5 秒钩子、首帧和完播评分见 `references/five-second-hook-system.md`。发布级质量评分见 `references/quality-scoring.md`。视频类型决策见 `references/decision-engine.md`。空间漫游能力等级见 `references/walkthrough-capability-levels.md`。样片级连续空间漫游见 `references/sample-level-walkthrough.md`。样片复刻失败诊断见 `references/sample-replication-failure-diagnosis.md`。评估用例见 `references/eval-cases.md`。
+客户心理规则见 `references/customer-psychology.md`。前 5 秒钩子、首帧和完播评分见 `references/five-second-hook-system.md`。发布级质量评分和样片级连续漫游专项评分见 `references/quality-scoring.md`。视频类型决策见 `references/decision-engine.md`。空间漫游能力等级见 `references/walkthrough-capability-levels.md`。样片级连续空间漫游见 `references/sample-level-walkthrough.md`。样片复刻失败诊断见 `references/sample-replication-failure-diagnosis.md`。评估用例见 `references/eval-cases.md`。
 
 ## 视频类型
 

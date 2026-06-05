@@ -1,4 +1,13 @@
 #!/usr/bin/env python3
+"""Legacy one-off renderer.
+
+This script is kept for the earlier reference-video case. New continuous
+walkthrough projects should use:
+
+    python scripts/render_project.py --config projects/<project>/project.json
+
+or call scripts/render_continuous_video_project.py directly.
+"""
 from __future__ import annotations
 
 import hashlib

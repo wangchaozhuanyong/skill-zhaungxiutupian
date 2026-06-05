@@ -12,6 +12,9 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 VALIDATOR = ROOT / "scripts" / "validate_walkthrough_continuity.py"
 SEGMENTED_ASSEMBLER = ROOT / "scripts" / "assemble_segmented_ai_walkthrough_clips.py"
+CONTINUOUS_RENDERER = ROOT / "scripts" / "render_continuous_video_project.py"
+STATIC_RENDERER = ROOT / "scripts" / "render_static_image_project.py"
+CONTINUOUS_SOURCE_TYPES = {"real_video", "3d_walkthrough", "continuous_ai_video"}
 
 
 def load_config(path: Path) -> dict[str, Any]:
@@ -37,7 +40,27 @@ def run(cmd: list[str], *, check: bool = True) -> subprocess.CompletedProcess[st
 
 
 def has_segmented_clips(config: dict[str, Any]) -> bool:
-    return bool(config.get("source_clips_dir") or config.get("clip_dir") or config.get("ai_clips_dir"))
+    source_type = str(config.get("source_type", ""))
+    return source_type in {"segmented_ai_clips", "multi_ai_clips"} or bool(
+        config.get("source_clips_dir") or config.get("clip_dir") or config.get("ai_clips_dir")
+    )
+
+
+def has_static_images(config: dict[str, Any]) -> bool:
+    source_type = str(config.get("source_type", ""))
+    return source_type in {"static_images", "static_images_no_depth"} or bool(config.get("source_images_dir"))
+
+
+def has_continuous_video(config: dict[str, Any]) -> bool:
+    source_type = str(config.get("source_type", ""))
+    source_video = resolve_path(config.get("source_video"))
+    if source_type in CONTINUOUS_SOURCE_TYPES:
+        return bool(source_video and source_video.exists())
+    return bool(source_video and source_video.exists() and not has_segmented_clips(config))
+
+
+def has_any_renderable_source(config: dict[str, Any]) -> bool:
+    return has_continuous_video(config) or has_segmented_clips(config) or has_static_images(config)
 
 
 def main() -> int:
@@ -66,6 +89,10 @@ def main() -> int:
         validate_cmd.append("--fail-on-overclaim")
 
     validation = run(validate_cmd, check=False)
+    if validation.returncode == 3 and not has_any_renderable_source(config):
+        print("没有找到可渲染素材。已生成连续性报告。")
+        print(report)
+        return 2
     if validation.returncode == 3:
         print(
             "项目目标高于当前素材能力，已停止渲染。请查看 continuity_report.md，或明确 allow_downgrade=true。",
@@ -77,14 +104,22 @@ def main() -> int:
     if args.validate_only:
         return 0
 
+    if has_continuous_video(config):
+        cmd = [sys.executable, str(CONTINUOUS_RENDERER), "--config", str(config_path)]
+        if allow_downgrade:
+            cmd.append("--allow-downgrade")
+        return run(cmd, check=False).returncode
+
     if has_segmented_clips(config):
         return run([sys.executable, str(SEGMENTED_ASSEMBLER), "--config", str(config_path)], check=False).returncode
 
-    source_video = resolve_path(config.get("source_video"))
-    if source_video and source_video.exists():
-        print("已生成连续性报告。当前通用入口暂不重剪单条连续视频，请使用对应后期脚本或新增 renderer。")
+    if has_static_images(config):
+        if STATIC_RENDERER.exists():
+            return run([sys.executable, str(STATIC_RENDERER), "--config", str(config_path)], check=False).returncode
+        print("当前项目只有静态图素材，但还没有通用 L1 静态关键帧/伪漫游渲染器。")
+        print("请使用 gpt-image-2 生成关键帧后接入 L1 renderer，或改用已有图片展示脚本。")
         print(report)
-        return 0
+        return 4
 
     print("没有找到可渲染素材。已生成连续性报告。")
     print(report)

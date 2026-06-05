@@ -225,14 +225,27 @@ def main() -> int:
     out_dir = resolve_path(args.clips_dir) or resolve_path(config.get("source_clips_dir")) or DEFAULT_CLIP_DIR
     assert out_dir is not None
 
+    load_dotenv(ROOT / ".env")
+    load_dotenv(REPO / ".env")
     load_dotenv(Path.home() / ".hermes" / ".env")
     if not os.environ.get("FAL_KEY", "").strip() or os.environ["FAL_KEY"].strip() == "your_fal_api_key_here":
         print("FAL_KEY is not configured.")
-        print("Open /Users/wangchao/.hermes/.env and add: FAL_KEY=your_real_fal_key")
+        print("Add it to one of these files:")
+        print(f"- {ROOT / '.env'}")
+        print(f"- {REPO / '.env'}")
+        print("- /Users/wangchao/.hermes/.env")
+        print("Format: FAL_KEY=your_real_fal_key")
         return 2
 
     out_dir.mkdir(parents=True, exist_ok=True)
-    from plugins.video_gen.fal import FALVideoGenProvider
+    try:
+        from plugins.video_gen.fal import FALVideoGenProvider
+    except Exception as exc:
+        print("Cannot import FALVideoGenProvider.")
+        print("This repository does not include the video generation provider implementation.")
+        print("Install or add the provider at plugins/video_gen/fal.py, then run this script again.")
+        print(f"Original import error: {exc}")
+        return 3
 
     provider = FALVideoGenProvider()
     style_bible = style_bible_from_config(config)

@@ -3,15 +3,24 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
+import re
+import subprocess
 from pathlib import Path
 from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
+DEPS = ROOT / ".deps"
+if DEPS.exists():
+    import sys
+
+    sys.path.insert(0, str(DEPS))
 OUT_DIR = ROOT / "output"
 VIDEO_EXTS = {".mp4", ".mov", ".m4v", ".webm"}
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".webp"}
 L_ORDER = {"L0": 0, "L1": 1, "L2": 2, "L3": 3, "L4": 4}
+VISUAL_SAMPLE_COUNT = 10
 
 
 def load_config(path: Path | None) -> dict[str, Any]:
@@ -78,7 +87,254 @@ def labels_for_level(level: str) -> tuple[list[str], list[str]]:
     return ["样片级连续空间漫游", "sample-level continuous walkthrough"], []
 
 
+def ffmpeg_exe() -> str:
+    try:
+        import imageio_ffmpeg
+
+        return imageio_ffmpeg.get_ffmpeg_exe()
+    except Exception:
+        return "ffmpeg"
+
+
+def run(cmd: list[str]) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+
+def get_duration(path: Path) -> float:
+    proc = run([ffmpeg_exe(), "-hide_banner", "-i", str(path)])
+    text = "\n".join([proc.stdout, proc.stderr])
+    match = re.search(r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)", text)
+    if not match:
+        return 0.0
+    h, m, s = match.groups()
+    return int(h) * 3600 + int(m) * 60 + float(s)
+
+
+def extract_frame(src: Path, timestamp: float, out: Path) -> bool:
+    out.parent.mkdir(parents=True, exist_ok=True)
+    proc = run(
+        [
+            ffmpeg_exe(),
+            "-y",
+            "-ss",
+            f"{max(0.0, timestamp):.3f}",
+            "-i",
+            str(src),
+            "-frames:v",
+            "1",
+            "-q:v",
+            "2",
+            str(out),
+        ]
+    )
+    return proc.returncode == 0 and out.exists() and out.stat().st_size > 512
+
+
+def extract_video_frames(video: Path, frame_dir: Path, output_name: str, samples: int) -> list[Path]:
+    duration = get_duration(video)
+    if duration <= 0.0:
+        return []
+    start = 0.12 if duration <= 0.6 else 0.25
+    end = max(start, duration - start)
+    if samples == 1:
+        times = [duration / 2]
+    else:
+        step = (end - start) / max(1, samples - 1)
+        times = [start + i * step for i in range(samples)]
+    frames: list[Path] = []
+    for index, timestamp in enumerate(times):
+        out = frame_dir / f"{output_name}_frame_{index:02d}.jpg"
+        if extract_frame(video, timestamp, out):
+            frames.append(out)
+    return frames
+
+
+def extract_clip_frames(clip_files: list[Path], frame_dir: Path, output_name: str, samples: int) -> list[Path]:
+    if not clip_files:
+        return []
+    per_clip = max(1, math.ceil(samples / len(clip_files)))
+    frames: list[Path] = []
+    for clip_index, clip in enumerate(clip_files):
+        duration = get_duration(clip)
+        if duration <= 0.0:
+            continue
+        clip_samples = min(per_clip, samples - len(frames))
+        start = 0.12 if duration <= 0.6 else 0.25
+        end = max(start, duration - start)
+        for sample_index in range(clip_samples):
+            if clip_samples == 1:
+                timestamp = duration / 2
+            else:
+                timestamp = start + (end - start) * sample_index / max(1, clip_samples - 1)
+            out = frame_dir / f"{output_name}_clip_{clip_index:02d}_{sample_index:02d}.jpg"
+            if extract_frame(clip, timestamp, out):
+                frames.append(out)
+            if len(frames) >= samples:
+                return frames
+    return frames
+
+
+def image_frames(image_files: list[Path], frame_dir: Path, output_name: str, samples: int) -> list[Path]:
+    try:
+        from PIL import Image
+    except Exception:
+        return []
+    chosen = image_files[:samples]
+    frames: list[Path] = []
+    frame_dir.mkdir(parents=True, exist_ok=True)
+    for index, image_path in enumerate(chosen):
+        out = frame_dir / f"{output_name}_image_{index:02d}.jpg"
+        try:
+            with Image.open(image_path) as img:
+                img.convert("RGB").save(out, quality=90)
+            frames.append(out)
+        except Exception:
+            continue
+    return frames
+
+
+def make_contact_sheet(frames: list[Path], sheet_path: Path) -> str:
+    if not frames:
+        return ""
+    try:
+        from PIL import Image, ImageDraw
+    except Exception:
+        return ""
+    thumbs = []
+    for frame in frames:
+        try:
+            with Image.open(frame) as img:
+                thumb = img.convert("RGB")
+                thumb.thumbnail((216, 384), Image.Resampling.LANCZOS)
+                canvas = Image.new("RGB", (216, 384), (18, 18, 18))
+                canvas.paste(thumb, ((216 - thumb.width) // 2, (384 - thumb.height) // 2))
+                thumbs.append((frame.name, canvas))
+        except Exception:
+            continue
+    if not thumbs:
+        return ""
+    cols = 4
+    rows = math.ceil(len(thumbs) / cols)
+    sheet = Image.new("RGB", (216 * cols, 384 * rows), (16, 16, 16))
+    draw = ImageDraw.Draw(sheet)
+    for index, (name, thumb) in enumerate(thumbs):
+        x = (index % cols) * 216
+        y = (index // cols) * 384
+        sheet.paste(thumb, (x, y))
+        draw.rectangle((x, y, x + 215, y + 383), outline=(54, 54, 54), width=1)
+        draw.text((x + 8, y + 8), f"{index + 1}", fill=(238, 238, 238))
+        draw.text((x + 8, y + 28), name[:24], fill=(180, 180, 180))
+    sheet_path.parent.mkdir(parents=True, exist_ok=True)
+    sheet.save(sheet_path, quality=92)
+    return str(sheet_path)
+
+
+def frame_metrics(frames: list[Path]) -> dict[str, Any]:
+    base = {
+        "sampled_frame_count": len(frames),
+        "scene_change_count": 0,
+        "avg_frame_delta": 0.0,
+        "max_frame_delta": 0.0,
+        "hard_cut_risk": "unknown",
+        "motion_continuity_risk": "unknown",
+    }
+    if len(frames) < 2:
+        return base
+    try:
+        import numpy as np
+        from PIL import Image
+    except Exception:
+        return base
+    arrays = []
+    for frame in frames:
+        try:
+            with Image.open(frame) as img:
+                arr = np.asarray(img.convert("RGB").resize((160, 284))).astype(np.float32) / 255.0
+                gray = arr[..., 0] * 0.2126 + arr[..., 1] * 0.7152 + arr[..., 2] * 0.0722
+                arrays.append(gray)
+        except Exception:
+            continue
+    if len(arrays) < 2:
+        return base
+    deltas = [float(np.mean(np.abs(arrays[i] - arrays[i - 1]))) for i in range(1, len(arrays))]
+    avg_delta = float(np.mean(deltas))
+    max_delta = float(np.max(deltas))
+    scene_changes = sum(1 for item in deltas if item >= 0.24)
+    if scene_changes >= 3 or max_delta >= 0.40:
+        hard_risk = "high"
+    elif scene_changes >= 1 or max_delta >= 0.28:
+        hard_risk = "medium"
+    else:
+        hard_risk = "low"
+    if hard_risk == "high" or avg_delta >= 0.18:
+        motion_risk = "high"
+    elif hard_risk == "medium" or avg_delta >= 0.11:
+        motion_risk = "medium"
+    else:
+        motion_risk = "low"
+    return {
+        "sampled_frame_count": len(arrays),
+        "scene_change_count": scene_changes,
+        "avg_frame_delta": round(avg_delta, 4),
+        "max_frame_delta": round(max_delta, 4),
+        "hard_cut_risk": hard_risk,
+        "motion_continuity_risk": motion_risk,
+    }
+
+
+def collect_visual_evidence(
+    *,
+    video_files: list[Path],
+    clip_files: list[Path],
+    image_files: list[Path],
+    is_single_video: bool,
+    is_multi_clip: bool,
+    is_static: bool,
+    output_name: str,
+    keyframes_output: Path | None,
+) -> dict[str, Any]:
+    frame_dir = OUT_DIR / f"{output_name}_continuity_frames"
+    sheet_path = keyframes_output or OUT_DIR / f"{output_name}_continuity_keyframes.jpg"
+    note = ""
+    frames: list[Path] = []
+    source = "none"
+
+    try:
+        if is_single_video and video_files:
+            source = "single_video"
+            frames = extract_video_frames(video_files[0], frame_dir, output_name, VISUAL_SAMPLE_COUNT)
+            note = "已从单条视频抽帧检查。"
+        elif is_multi_clip and clip_files:
+            source = "multi_clip"
+            frames = extract_clip_frames(clip_files, frame_dir, output_name, VISUAL_SAMPLE_COUNT)
+            note = "已从多个 clip 抽帧；多 clip 拼接仍默认不能升级为 L4。"
+        elif is_static and image_files:
+            source = "static_images"
+            frames = image_frames(image_files, frame_dir, output_name, VISUAL_SAMPLE_COUNT)
+            note = "已从静态图生成关键帧证据；静态图不能通过真正 walkthrough 检查。"
+        else:
+            note = "没有可抽帧的视频、clip 或图片。"
+    except Exception as exc:
+        note = f"视觉证据抽取失败：{exc}"
+        frames = []
+
+    metrics = frame_metrics(frames)
+    sheet = make_contact_sheet(frames, sheet_path)
+    visual_available = bool(sheet) and metrics["sampled_frame_count"] >= 2
+    metrics.update(
+        {
+            "keyframe_sheet": sheet,
+            "visual_evidence_available": visual_available,
+            "visual_evidence_source": source,
+            "visual_evidence_note": note,
+        }
+    )
+    return metrics
+
+
 def assess(args: argparse.Namespace, config: dict[str, Any]) -> dict[str, Any]:
+    project_id = str(config.get("project_id", args.project_id or "walkthrough_continuity_check"))
+    output_name = str(config.get("output_name", project_id))
     source_type = args.source_type or str(config.get("source_type", "auto"))
     video = resolve_path(args.video) if args.video else source_from_config(config, "source_video")
     images_dir = resolve_path(args.images_dir) if args.images_dir else source_from_config(config, "source_images_dir")
@@ -103,6 +359,18 @@ def assess(args: argparse.Namespace, config: dict[str, Any]) -> dict[str, Any]:
         if isinstance(item, dict)
     ]
 
+    keyframes_output = resolve_path(args.keyframes_output) if args.keyframes_output else None
+    visual = collect_visual_evidence(
+        video_files=video_files,
+        clip_files=clip_files,
+        image_files=image_files,
+        is_single_video=is_single_video,
+        is_multi_clip=is_multi_clip,
+        is_static=is_static,
+        output_name=output_name,
+        keyframes_output=keyframes_output,
+    )
+
     level = "L0"
     reasons: list[str] = []
 
@@ -116,18 +384,38 @@ def assess(args: argparse.Namespace, config: dict[str, Any]) -> dict[str, Any]:
         level = "L2"
         reasons.append("素材是多个独立 AI video clip 拼接，默认只能标注为 AI 分段空间漫游。")
     elif is_single_video:
+        l4_visual_ok = (
+            visual["visual_evidence_available"]
+            and visual["hard_cut_risk"] != "high"
+            and visual["motion_continuity_risk"] != "high"
+        )
         if source_type in {"real_video", "3d_walkthrough", "continuous_ai_video"} or config.get("single_continuous_video"):
-            level = "L4" if all_l4_checks_passed(config) else "L3"
-            reasons.append("素材是单条连续视频，可能达到真正空间漫游；L4 需要连续性检查全部通过。")
+            if all_l4_checks_passed(config) and l4_visual_ok:
+                level = "L4"
+                reasons.append("素材是单条连续视频，配置连续性检查和视觉证据均支持 L4。")
+            else:
+                level = "L3"
+                reasons.append("素材是单条连续视频，可能达到真正空间漫游；L4 还需要全部连续性检查和低硬切风险。")
         else:
             level = "L3"
-            reasons.append("素材是单条视频，但来源未完全声明；可作为 L3 候选，L4 需要人工/配置确认。")
+            reasons.append("素材是单条视频，但来源未完全声明；可作为 L3 候选，L4 需要来源、连续性和视觉证据确认。")
     else:
         reasons.append("未找到可用静态图、clip 或连续视频素材。")
+
+    if source_type in {"segmented_ai_clips", "multi_ai_clips"}:
+        reasons.append("多个独立 AI clip 即使有动态，也不能默认称为真正 walkthrough 或样片级连续空间漫游。")
+    if is_static:
+        reasons.append("静态图运镜不能升级为真正 walkthrough。")
+    if expected_level(config) == "L4" and not visual["visual_evidence_available"]:
+        reasons.append("目标为 L4，但没有可审查的关键帧视觉证据。")
+    if expected_level(config) == "L4" and visual["hard_cut_risk"] == "high":
+        reasons.append("目标为 L4，但关键帧差异显示硬切/空间断裂风险高。")
 
     allowed, forbidden = labels_for_level(level)
     exp = expected_level(config)
     passes_expected = exp is None or L_ORDER[level] >= L_ORDER[exp]
+    if exp == "L4":
+        passes_expected = passes_expected and visual["visual_evidence_available"] and visual["hard_cut_risk"] != "high"
     if exp and not passes_expected:
         reasons.append(f"目标要求 {exp}，当前只能达到 {level}。")
 
@@ -137,8 +425,15 @@ def assess(args: argparse.Namespace, config: dict[str, Any]) -> dict[str, Any]:
     if bool(config.get("script_adds_fade_in_out")):
         fade_status = "added_by_assembly_script"
 
+    manual_review_required = bool(
+        is_multi_clip
+        or (exp in {"L3", "L4"} and not visual["visual_evidence_available"])
+        or (exp == "L4" and level != "L4")
+        or visual["hard_cut_risk"] in {"medium", "high"}
+    )
+
     return {
-        "project_id": config.get("project_id", args.project_id or "walkthrough_continuity_check"),
+        "project_id": project_id,
         "target_video_type": config.get("target_video_type", ""),
         "expected_capability_level": exp or "",
         "assessed_capability_level": level,
@@ -159,6 +454,8 @@ def assess(args: argparse.Namespace, config: dict[str, Any]) -> dict[str, Any]:
         "allowed_labels": allowed,
         "forbidden_labels": forbidden,
         "reasons": reasons,
+        "manual_review_required": manual_review_required,
+        **visual,
     }
 
 
@@ -172,6 +469,7 @@ def report_markdown(result: dict[str, Any]) -> str:
     forbidden = "\n".join(f"- {label}" for label in result["forbidden_labels"])
     reasons = "\n".join(f"- {item}" for item in result["reasons"])
     labels = "\n".join(f"- {label}" for label in result["clip_labels"]) or "- 未提供"
+    keyframe_sheet = result["keyframe_sheet"] or "未生成"
     return f"""# Walkthrough Continuity Report
 
 项目：{result['project_id']}
@@ -184,10 +482,26 @@ def report_markdown(result: dict[str, Any]) -> str:
 - 是否单条连续视频：{yes(result['is_single_continuous_video'])}
 - 是否多 clip 拼接：{yes(result['is_multi_clip'])}
 - 是否静态图运镜：{yes(result['is_static_image_motion'])}
+- 是否允许称为真正 walkthrough：{yes(result['assessed_capability_level'] in {'L3', 'L4'})}
+- 是否允许称为样片级连续空间漫游：{yes(result['assessed_capability_level'] == 'L4')}
+- 是否需要人工复核：{yes(result['manual_review_required'])}
 - clip 数量：{result['clip_count']}
 - 图片数量：{result['image_count']}
 - 视频数量：{result['video_count']}
 - fade in/out 检查：{result['fade_in_out']}
+
+## 视觉证据
+
+- 视觉证据可用：{yes(result['visual_evidence_available'])}
+- 视觉证据来源：{result['visual_evidence_source']}
+- 关键帧拼图：`{keyframe_sheet}`
+- 抽帧数量：{result['sampled_frame_count']}
+- 场景跳变数量：{result['scene_change_count']}
+- 平均帧差：{result['avg_frame_delta']}
+- 最大帧差：{result['max_frame_delta']}
+- 硬切风险：{result['hard_cut_risk']}
+- 运动连续性风险：{result['motion_continuity_risk']}
+- 说明：{result['visual_evidence_note']}
 
 ## 允许标记为
 
@@ -243,6 +557,7 @@ def main() -> int:
     parser.add_argument("--project-id")
     parser.add_argument("--output", help="Output markdown report path")
     parser.add_argument("--json-output", help="Optional JSON report path")
+    parser.add_argument("--keyframes-output", help="Optional keyframe contact sheet path")
     parser.add_argument("--fail-on-overclaim", action="store_true")
     args = parser.parse_args()
 
