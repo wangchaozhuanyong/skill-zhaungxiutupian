@@ -265,7 +265,93 @@ def render_image_clip(
     return description
 
 
-def concat_clips(clips: list[Path], output_name: str, video_only: Path) -> None:
+def sanitize_transition(value: str | None) -> str:
+    allowed = {
+        "fade",
+        "smoothleft",
+        "smoothright",
+        "wipeleft",
+        "wiperight",
+        "dissolve",
+    }
+    transition = (value or "fade").strip().lower()
+    return transition if transition in allowed else "fade"
+
+
+def apply_transition_padding(items: list[dict[str, Any]], target_duration: float, transition_duration: float) -> tuple[float, float]:
+    if transition_duration <= 0 or len(items) <= 1:
+        per_image = target_duration / max(1, len(items))
+        return per_image, target_duration
+    extra_per_image = transition_duration * (len(items) - 1) / len(items)
+    for item in items:
+        item["computed_duration"] = float(item["computed_duration"]) + extra_per_image
+    clip_total = sum(float(item["computed_duration"]) for item in items)
+    final_duration = clip_total - transition_duration * (len(items) - 1)
+    per_image = clip_total / max(1, len(items))
+    return per_image, final_duration
+
+
+def concat_clips(
+    clips: list[Path],
+    output_name: str,
+    video_only: Path,
+    *,
+    durations: list[float],
+    transition_duration: float,
+    transition_type: str,
+) -> None:
+    if len(clips) <= 1 or transition_duration <= 0:
+        concat_file = OUT_DIR / f"{output_name}_static_concat.txt"
+        concat_file.write_text("".join(f"file '{clip.as_posix()}'\n" for clip in clips), encoding="utf-8")
+        run([ffmpeg_exe(), "-y", "-f", "concat", "-safe", "0", "-i", str(concat_file), "-c", "copy", "-movflags", "+faststart", str(video_only)])
+        return
+
+    transition = sanitize_transition(transition_type)
+    capped_duration = min(transition_duration, max(0.1, min(durations) - 0.1))
+    cmd = [ffmpeg_exe(), "-y"]
+    for clip in clips:
+        cmd.extend(["-i", str(clip)])
+
+    filters = []
+    current = "0:v"
+    offset = max(0.0, durations[0] - capped_duration)
+    for index in range(1, len(clips)):
+        out = f"v{index}"
+        filters.append(
+            f"[{current}][{index}:v]xfade=transition={transition}:duration={capped_duration:.3f}:offset={offset:.3f}[{out}]"
+        )
+        current = out
+        offset += durations[index] - capped_duration
+    filters.append(f"[{current}]format=yuv420p[vout]")
+
+    cmd.extend(
+        [
+            "-filter_complex",
+            ";".join(filters),
+            "-map",
+            "[vout]",
+            "-an",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-profile:v",
+            "high",
+            "-level",
+            "4.2",
+            "-preset",
+            "veryfast",
+            "-crf",
+            "18",
+            "-movflags",
+            "+faststart",
+            str(video_only),
+        ]
+    )
+    run(cmd)
+
+
+def concat_clips_hard_cut(clips: list[Path], output_name: str, video_only: Path) -> None:
     concat_file = OUT_DIR / f"{output_name}_static_concat.txt"
     concat_file.write_text("".join(f"file '{clip.as_posix()}'\n" for clip in clips), encoding="utf-8")
     run([ffmpeg_exe(), "-y", "-f", "concat", "-safe", "0", "-i", str(concat_file), "-c", "copy", "-movflags", "+faststart", str(video_only)])
@@ -415,6 +501,8 @@ def write_plan(
     duration: float,
     per_image_duration: float,
     config: dict[str, Any],
+    transition_duration: float,
+    transition_type: str,
 ) -> None:
     rows = "\n".join(
         (
@@ -454,6 +542,7 @@ def write_plan(
 - 总时长：{duration:.2f} 秒
 - 单图时长：{per_image_duration:.2f} 秒
 - 运镜：慢推、轻微横移、中心构图收束，模拟看房氛围但不冒充真实 walkthrough。
+- 转场：{transition_type} 柔和叠化，单次约 {transition_duration:.2f} 秒；避免图片之间生硬硬切。
 - 调色：克制通透的高级样板间调色，低饱和暖灰，保留深色柜体重量感和暗部层次。
 - 字幕：少字或无字，避免遮挡空间价值。
 
@@ -506,6 +595,9 @@ def main() -> int:
     width, height = parse_resolution(str(config.get("resolution", "1080x1920")))
     fps = int(config.get("fps", 60))
     fade_to_black = bool(config.get("fade_to_black", False))
+    transition_duration = float(config.get("transition_duration", 0.42) or 0.0)
+    transition_type = sanitize_transition(str(config.get("transition_type", "fade")))
+    per_image_duration, duration = apply_transition_padding(items, duration, transition_duration)
 
     first_image_parent = Path(items[0]["path"]).parent
     continuity_report, report_path = run_validator(config_path, images_dir or first_image_parent, output_name)
@@ -529,7 +621,14 @@ def main() -> int:
     final = OUT_DIR / f"{output_name}.mp4"
     preview = OUT_DIR / f"{output_name}_preview.jpg"
     plan = OUT_DIR / f"{output_name}_plan.md"
-    concat_clips(tmp_clips, output_name, video_only)
+    concat_clips(
+        tmp_clips,
+        output_name,
+        video_only,
+        durations=[float(item["computed_duration"]) for item in items],
+        transition_duration=transition_duration,
+        transition_type=transition_type,
+    )
     audio_note = mux_music(video_only, music, final, duration)
     make_preview(final, preview, duration, output_name)
     update_manifest(project_id, items, music)
@@ -545,6 +644,8 @@ def main() -> int:
         duration=duration,
         per_image_duration=per_image_duration,
         config=config,
+        transition_duration=transition_duration,
+        transition_type=transition_type,
     )
     print(final)
     print(preview)
